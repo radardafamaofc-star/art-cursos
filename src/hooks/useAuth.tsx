@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -20,7 +20,7 @@ interface AuthContextType {
   profileError: string | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ user: User; profile: Profile }>;
   signOut: () => Promise<void>;
   refetchProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -35,27 +35,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchOrCreateProfile = async (currentUser: User): Promise<Profile | null> => {
-    setProfileError(null);
-    
+  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', currentUser.id)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
       console.error('Error fetching profile:', error);
-      setProfileError(error.message);
-      return null;
+      throw error;
     }
 
-    if (data) return data as Profile;
+    return data as Profile | null;
+  }, []);
 
-    // Profile doesn't exist, create one
+  const createProfile = useCallback(async (currentUser: User): Promise<Profile> => {
     const fullName = (currentUser.user_metadata as any)?.full_name ?? null;
 
-    const { data: created, error: createError } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .insert({
         user_id: currentUser.id,
@@ -65,54 +63,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .single();
 
-    if (createError) {
-      console.error('Error creating profile:', createError);
-      setProfileError(createError.message);
-      return null;
+    if (error) {
+      console.error('Error creating profile:', error);
+      throw error;
     }
 
-    return created as Profile;
-  };
+    return data as Profile;
+  }, []);
 
-  const refetchProfile = async () => {
+  const fetchOrCreateProfile = useCallback(async (currentUser: User): Promise<Profile | null> => {
+    setProfileError(null);
+    
+    try {
+      let profileData = await fetchProfile(currentUser.id);
+      
+      if (!profileData) {
+        profileData = await createProfile(currentUser);
+      }
+      
+      return profileData;
+    } catch (error: any) {
+      setProfileError(error.message);
+      return null;
+    }
+  }, [fetchProfile, createProfile]);
+
+  const refetchProfile = useCallback(async () => {
     if (user) {
       setLoading(true);
       const fetchedProfile = await fetchOrCreateProfile(user);
       setProfile(fetchedProfile);
       setLoading(false);
     }
-  };
+  }, [user, fetchOrCreateProfile]);
 
   useEffect(() => {
+    let mounted = true;
+
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        const profile = await fetchOrCreateProfile(session.user);
-        setProfile(profile);
+        const profileData = await fetchOrCreateProfile(session.user);
+        if (mounted) {
+          setProfile(profileData);
+        }
       }
-      setLoading(false);
+      
+      if (mounted) {
+        setLoading(false);
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
+        
         setSession(session);
         setUser(session?.user ?? null);
 
-        if (session?.user) {
-          const profile = await fetchOrCreateProfile(session.user);
-          setProfile(profile);
-        } else {
+        if (event === 'SIGNED_OUT') {
           setProfile(null);
+          setProfileError(null);
         }
-        setLoading(false);
+        // Don't refetch profile here for SIGNED_IN since signIn handles it
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchOrCreateProfile]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const { error } = await supabase.auth.signUp({
@@ -132,8 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     toast.success('Conta criada com sucesso!');
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  const signIn = async (email: string, password: string): Promise<{ user: User; profile: Profile }> => {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -142,7 +169,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error;
     }
 
+    if (!data.user) {
+      throw new Error('Login failed - no user returned');
+    }
+
+    // Immediately fetch/create profile after login
+    const profileData = await fetchOrCreateProfile(data.user);
+    
+    if (!profileData) {
+      throw new Error('Failed to load profile');
+    }
+
+    setProfile(profileData);
     toast.success('Login realizado com sucesso!');
+    
+    return { user: data.user, profile: profileData };
   };
 
   const signOut = async () => {
@@ -151,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error;
     }
     setProfile(null);
+    setProfileError(null);
     toast.success('Logout realizado com sucesso!');
   };
 
