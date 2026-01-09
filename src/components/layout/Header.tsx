@@ -2,9 +2,14 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, profile, loading } = useAuth();
+
+  // Determine where to redirect logged-in users
+  const dashboardPath = profile?.role === 'admin' ? '/admin' : '/student';
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background-pure/80 backdrop-blur-xl">
@@ -30,12 +35,22 @@ export function Header() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" asChild>
-            <Link to="/login">Entrar</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/register">Começar Agora</Link>
-          </Button>
+          {loading ? (
+            <div className="w-20 h-9 bg-muted animate-pulse rounded-md" />
+          ) : user && profile ? (
+            <Button asChild>
+              <Link to={dashboardPath}>Minha Conta</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild>
+                <Link to="/login">Entrar</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/register">Começar Agora</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -74,12 +89,20 @@ export function Header() {
               Sobre
             </Link>
             <div className="flex flex-col gap-2 pt-4 border-t">
-              <Button variant="outline" asChild>
-                <Link to="/login" onClick={() => setMobileMenuOpen(false)}>Entrar</Link>
-              </Button>
-              <Button asChild>
-                <Link to="/register" onClick={() => setMobileMenuOpen(false)}>Começar Agora</Link>
-              </Button>
+              {user && profile ? (
+                <Button asChild>
+                  <Link to={dashboardPath} onClick={() => setMobileMenuOpen(false)}>Minha Conta</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <Link to="/login" onClick={() => setMobileMenuOpen(false)}>Entrar</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link to="/register" onClick={() => setMobileMenuOpen(false)}>Começar Agora</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </nav>
         </div>
