@@ -33,6 +33,7 @@ export default function Login() {
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.message || 'Erro ao fazer login');
+    } finally {
       setLoading(false);
     }
   };
@@ -113,7 +114,7 @@ export default function Login() {
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4">
-                <Button type="submit" className="w-full" size="lg" disabled={loading || authLoading}>
+                <Button type="submit" className="w-full" size="lg" disabled={loading}>
                   {loading ? 'Entrando...' : 'Entrar'}
                 </Button>
                 
