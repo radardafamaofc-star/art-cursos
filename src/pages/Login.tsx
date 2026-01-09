@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,29 +14,42 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { signIn, user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Redirect when user and profile are both loaded
+  // Redirect if already logged in with profile loaded
   useEffect(() => {
-    if (user && profile && !authLoading) {
-      const redirectPath = profile.role === 'admin' ? '/admin' : '/student';
+    if (!authLoading && user && profile) {
+      const from = (location.state as any)?.from?.pathname;
+      const redirectPath = from || (profile.role === 'admin' ? '/admin' : '/student');
       navigate(redirectPath, { replace: true });
     }
-  }, [user, profile, authLoading, navigate]);
+  }, [user, profile, authLoading, navigate, location.state]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      // The useEffect will handle the redirect once profile is loaded
+      const { profile: userProfile } = await signIn(email, password);
+      // Navigate immediately after successful login with profile
+      const from = (location.state as any)?.from?.pathname;
+      const redirectPath = from || (userProfile.role === 'admin' ? '/admin' : '/student');
+      navigate(redirectPath, { replace: true });
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.message || 'Erro ao fazer login');
-    } finally {
       setLoading(false);
     }
   };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
