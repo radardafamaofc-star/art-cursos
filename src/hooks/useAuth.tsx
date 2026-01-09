@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface Profile {
@@ -33,27 +32,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchOrCreateProfile = async (user: User) => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', userId)
-      .single();
+      .eq('user_id', user.id)
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching profile:', error);
       return null;
     }
-    return data as Profile;
+
+    if (data) return data as Profile;
+
+    const fullName = (user.user_metadata as any)?.full_name ?? null;
+
+    const { data: created, error: createError } = await supabase
+      .from('profiles')
+      .insert({
+        user_id: user.id,
+        full_name: fullName,
+        role: 'student',
+      })
+      .select('*')
+      .single();
+
+    if (createError) {
+      console.error('Error creating profile:', createError);
+      return null;
+    }
+
+    return created as Profile;
   };
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id).then(setProfile);
+        const profile = await fetchOrCreateProfile(session.user);
+        setProfile(profile);
       }
       setLoading(false);
     });
@@ -63,9 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
-          const profile = await fetchProfile(session.user.id);
+          const profile = await fetchOrCreateProfile(session.user);
           setProfile(profile);
         } else {
           setProfile(null);

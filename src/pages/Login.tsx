@@ -15,13 +15,13 @@ export default function Login() {
   const { signIn, user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect when user and profile are loaded
+  // Redirect when the user is authenticated (role defaults to student)
   useEffect(() => {
-    if (user && profile && !authLoading) {
-      const redirectPath = profile.role === 'admin' ? '/admin' : '/student';
+    if (user && !authLoading) {
+      const redirectPath = profile?.role === 'admin' ? '/admin' : '/student';
       navigate(redirectPath, { replace: true });
     }
-  }, [user, profile, authLoading, navigate]);
+  }, [user, profile?.role, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
