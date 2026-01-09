@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import { 
   Play, 
   Clock, 
@@ -18,83 +22,196 @@ import {
   ArrowLeft
 } from "lucide-react";
 
-// Mock course data
-const courseData = {
-  id: "1",
-  title: "Desenvolvimento Web Completo",
-  description: "Aprenda HTML, CSS, JavaScript e React do zero ao avançado. Este curso abrangente irá transformá-lo em um desenvolvedor web profissional, cobrindo todos os fundamentos e técnicas avançadas necessárias para criar aplicações web modernas.",
-  thumbnail: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=1200&auto=format&fit=crop&q=60",
-  instructor: {
-    name: "João Silva",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=60",
-    bio: "Desenvolvedor web com mais de 10 anos de experiência em empresas como Google e Microsoft.",
-  },
-  duration: "40h",
-  students: 2340,
-  modules: 12,
-  lessons: 85,
-  category: "Programação",
-  level: "Iniciante ao Avançado",
-  rating: 4.8,
-  reviews: 456,
-  lastUpdate: "Janeiro 2025",
-  whatYouWillLearn: [
-    "Dominar HTML5, CSS3 e JavaScript moderno",
-    "Criar aplicações React do zero",
-    "Trabalhar com APIs e bancos de dados",
-    "Implementar autenticação e autorização",
-    "Deploy de aplicações na nuvem",
-    "Boas práticas e padrões de código",
-  ],
-  curriculum: [
-    {
-      id: "1",
-      title: "Introdução ao Desenvolvimento Web",
-      lessons: [
-        { id: "1-1", title: "Bem-vindo ao curso", duration: "5:00", completed: true, preview: true },
-        { id: "1-2", title: "Configurando o ambiente", duration: "15:00", completed: true, preview: true },
-        { id: "1-3", title: "Estrutura de um projeto web", duration: "12:00", completed: false, preview: false },
-      ],
-    },
-    {
-      id: "2",
-      title: "HTML5 - Fundamentos",
-      lessons: [
-        { id: "2-1", title: "Tags e elementos HTML", duration: "20:00", completed: false, preview: false },
-        { id: "2-2", title: "Semântica HTML5", duration: "18:00", completed: false, preview: false },
-        { id: "2-3", title: "Formulários e validação", duration: "25:00", completed: false, preview: false },
-      ],
-    },
-    {
-      id: "3",
-      title: "CSS3 - Estilização",
-      lessons: [
-        { id: "3-1", title: "Seletores e propriedades", duration: "22:00", completed: false, preview: false },
-        { id: "3-2", title: "Flexbox", duration: "30:00", completed: false, preview: false },
-        { id: "3-3", title: "Grid Layout", duration: "28:00", completed: false, preview: false },
-        { id: "3-4", title: "Animações CSS", duration: "20:00", completed: false, preview: false },
-      ],
-    },
-    {
-      id: "4",
-      title: "JavaScript - Do Básico ao Avançado",
-      lessons: [
-        { id: "4-1", title: "Variáveis e tipos de dados", duration: "15:00", completed: false, preview: false },
-        { id: "4-2", title: "Funções e escopo", duration: "25:00", completed: false, preview: false },
-        { id: "4-3", title: "DOM Manipulation", duration: "35:00", completed: false, preview: false },
-        { id: "4-4", title: "Promises e Async/Await", duration: "30:00", completed: false, preview: false },
-      ],
-    },
-  ],
-};
+interface Lesson {
+  id: string;
+  title: string;
+  content: string | null;
+  video_url: string | null;
+  duration: string | null;
+  sort_order: number;
+  module_id: string;
+}
+
+interface Module {
+  id: string;
+  title: string;
+  sort_order: number;
+  lessons: Lesson[];
+}
 
 export default function CourseDetail() {
   const { id } = useParams();
-  const course = courseData; // In production, fetch based on id
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
 
-  const completedLessons = course.curriculum.flatMap(m => m.lessons).filter(l => l.completed).length;
-  const totalLessons = course.curriculum.flatMap(m => m.lessons).length;
-  const progressPercentage = Math.round((completedLessons / totalLessons) * 100);
+  // Fetch course
+  const { data: course, isLoading: courseLoading } = useQuery({
+    queryKey: ['course-detail', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Fetch modules with lessons
+  const { data: modules = [] } = useQuery({
+    queryKey: ['course-modules', id],
+    queryFn: async () => {
+      const { data: modulesData, error: modulesError } = await supabase
+        .from('modules')
+        .select('*')
+        .eq('course_id', id)
+        .order('sort_order');
+      if (modulesError) throw modulesError;
+
+      const modulesWithLessons = await Promise.all(
+        modulesData.map(async (mod) => {
+          const { data: lessonsData } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('module_id', mod.id)
+            .order('sort_order');
+          return { ...mod, lessons: lessonsData || [] };
+        })
+      );
+
+      return modulesWithLessons as Module[];
+    },
+    enabled: !!id,
+  });
+
+  // Check if user is enrolled
+  const { data: enrollment } = useQuery({
+    queryKey: ['enrollment', user?.id, id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('course_id', id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!id,
+  });
+
+  // Fetch user's lesson progress
+  const { data: progressData = [] } = useQuery({
+    queryKey: ['lesson-progress', user?.id, id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('lesson_progress')
+        .select('lesson_id, completed')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch enrollment count
+  const { data: enrollmentCount = 0 } = useQuery({
+    queryKey: ['enrollment-count', id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('enrollments')
+        .select('id', { count: 'exact', head: true })
+        .eq('course_id', id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!id,
+  });
+
+  // Enroll mutation
+  const enrollMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('Você precisa estar logado');
+      const { error } = await supabase
+        .from('enrollments')
+        .insert({ user_id: user.id, course_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['enrollment'] });
+      queryClient.invalidateQueries({ queryKey: ['my-enrollments'] });
+      toast.success('Matrícula realizada com sucesso!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message);
+    },
+  });
+
+  const isEnrolled = !!enrollment;
+  const isAdmin = profile?.role === 'admin';
+  
+  const allLessons = modules.flatMap(m => m.lessons);
+  const completedLessons = progressData.filter(p => p.completed).map(p => p.lesson_id);
+  const completedCount = completedLessons.filter(id => allLessons.some(l => l.id === id)).length;
+  const progressPercentage = allLessons.length > 0 
+    ? Math.round((completedCount / allLessons.length) * 100)
+    : 0;
+
+  const firstLesson = allLessons[0];
+
+  const handleEnroll = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    enrollMutation.mutate();
+  };
+
+  const handleStartCourse = () => {
+    if (firstLesson) {
+      navigate(`/student/course/${id}/lesson/${firstLesson.id}`);
+    }
+  };
+
+  const handleLessonClick = (lesson: Lesson) => {
+    if (isEnrolled || isAdmin) {
+      navigate(`/student/course/${id}/lesson/${lesson.id}`);
+    } else if (!user) {
+      navigate('/login');
+    } else {
+      toast.info('Matricule-se para acessar as aulas');
+    }
+  };
+
+  if (courseLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Curso não encontrado</h1>
+            <Button asChild>
+              <Link to="/courses">Ver todos os cursos</Link>
+            </Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -127,31 +244,19 @@ export default function CourseDetail() {
                 <div className="flex flex-wrap items-center gap-6 text-sm">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    <span>{course.duration}</span>
+                    <span>{course.duration || '0h'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4" />
-                    <span>{course.lessons} aulas</span>
+                    <span>{allLessons.length} aulas</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    <span>{course.students} alunos</span>
+                    <span>{enrollmentCount} alunos</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Award className="h-4 w-4" />
-                    <span>{course.level}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mt-6">
-                  <img 
-                    src={course.instructor.avatar} 
-                    alt={course.instructor.name}
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div>
-                    <p className="font-medium">{course.instructor.name}</p>
-                    <p className="text-sm text-primary-foreground/70">Instrutor</p>
+                    <span>{modules.length} módulos</span>
                   </div>
                 </div>
               </div>
@@ -160,30 +265,70 @@ export default function CourseDetail() {
               <div className="lg:col-span-1">
                 <Card className="sticky top-24 animate-scale-in">
                   <div className="aspect-video relative overflow-hidden rounded-t-xl">
-                    <img 
-                      src={course.thumbnail}
-                      alt={course.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-foreground/30 flex items-center justify-center">
-                      <div className="w-16 h-16 rounded-full bg-primary-foreground/90 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform">
-                        <Play className="h-8 w-8 text-primary ml-1" />
+                    {course.thumbnail_url ? (
+                      <img 
+                        src={course.thumbnail_url}
+                        alt={course.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-muted flex items-center justify-center">
+                        <BookOpen className="h-16 w-16 text-muted-foreground" />
                       </div>
-                    </div>
+                    )}
+                    {firstLesson && (isEnrolled || isAdmin) && (
+                      <div className="absolute inset-0 bg-foreground/30 flex items-center justify-center">
+                        <button 
+                          onClick={handleStartCourse}
+                          className="w-16 h-16 rounded-full bg-primary-foreground/90 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                        >
+                          <Play className="h-8 w-8 text-primary ml-1" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <CardContent className="p-6 space-y-4">
-                    <Button size="lg" className="w-full">
-                      Começar Agora
-                    </Button>
-                    <Button size="lg" variant="outline" className="w-full">
-                      Adicionar à Lista
-                    </Button>
+                    {isEnrolled ? (
+                      <>
+                        <Button size="lg" className="w-full" onClick={handleStartCourse} disabled={!firstLesson}>
+                          {completedCount > 0 ? 'Continuar Curso' : 'Começar Agora'}
+                        </Button>
+                        <div className="pt-2">
+                          <div className="flex items-center justify-between text-sm mb-2">
+                            <span className="text-muted-foreground">Seu progresso</span>
+                            <span className="font-medium">{progressPercentage}%</span>
+                          </div>
+                          <Progress value={progressPercentage} className="h-2" />
+                        </div>
+                      </>
+                    ) : isAdmin ? (
+                      <>
+                        <Button size="lg" className="w-full" onClick={handleStartCourse} disabled={!firstLesson}>
+                          Visualizar Curso
+                        </Button>
+                        <Button size="lg" variant="outline" className="w-full" asChild>
+                          <Link to={`/admin/courses/${id}/modules`}>
+                            Gerenciar Conteúdo
+                          </Link>
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button 
+                          size="lg" 
+                          className="w-full" 
+                          onClick={handleEnroll}
+                          disabled={enrollMutation.isPending}
+                        >
+                          {enrollMutation.isPending ? 'Matriculando...' : 'Matricular-se Grátis'}
+                        </Button>
+                      </>
+                    )}
                     
                     <div className="text-sm text-muted-foreground space-y-2 pt-4 border-t">
                       <p>✓ Acesso vitalício</p>
                       <p>✓ Certificado de conclusão</p>
-                      <p>✓ Suporte do instrutor</p>
-                      <p>✓ Garantia de 7 dias</p>
+                      <p>✓ {allLessons.length} aulas em {modules.length} módulos</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -197,110 +342,84 @@ export default function CourseDetail() {
           <div className="container">
             <div className="grid lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-8">
-                {/* What you'll learn */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>O que você vai aprender</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {course.whatYouWillLearn.map((item, index) => (
-                        <div key={index} className="flex items-start gap-2">
-                          <CheckCircle2 className="h-5 w-5 text-success flex-shrink-0 mt-0.5" />
-                          <span className="text-sm">{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
                 {/* Curriculum */}
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>Conteúdo do Curso</CardTitle>
                       <span className="text-sm text-muted-foreground">
-                        {course.modules} módulos • {course.lessons} aulas
+                        {modules.length} módulos • {allLessons.length} aulas
                       </span>
                     </div>
                     
-                    {/* Progress (only show if enrolled) */}
-                    <div className="pt-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Seu progresso</span>
-                        <span className="font-medium">{progressPercentage}%</span>
+                    {isEnrolled && (
+                      <div className="pt-4">
+                        <div className="flex items-center justify-between text-sm mb-2">
+                          <span className="text-muted-foreground">Seu progresso</span>
+                          <span className="font-medium">{progressPercentage}%</span>
+                        </div>
+                        <Progress value={progressPercentage} className="h-2" />
                       </div>
-                      <Progress value={progressPercentage} className="h-2" />
-                    </div>
+                    )}
                   </CardHeader>
                   <CardContent>
-                    <Accordion type="multiple" className="space-y-2">
-                      {course.curriculum.map((module) => (
-                        <AccordionItem key={module.id} value={module.id} className="border rounded-lg px-4">
-                          <AccordionTrigger className="hover:no-underline">
-                            <div className="flex items-center gap-3 text-left">
-                              <span className="font-semibold">{module.title}</span>
-                              <Badge variant="muted" className="text-xs">
-                                {module.lessons.length} aulas
-                              </Badge>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <div className="space-y-2 pb-2">
-                              {module.lessons.map((lesson) => (
-                                <div 
-                                  key={lesson.id}
-                                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    {lesson.completed ? (
-                                      <CheckCircle2 className="h-5 w-5 text-success" />
-                                    ) : lesson.preview ? (
-                                      <PlayCircle className="h-5 w-5 text-primary" />
-                                    ) : (
-                                      <Lock className="h-5 w-5 text-muted-foreground" />
-                                    )}
-                                    <span className={lesson.completed ? "text-muted-foreground" : ""}>
-                                      {lesson.title}
-                                    </span>
-                                    {lesson.preview && (
-                                      <Badge variant="outline" className="text-xs">
-                                        Preview
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <span className="text-sm text-muted-foreground">
-                                    {lesson.duration}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </CardContent>
-                </Card>
+                    {modules.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Este curso ainda não possui conteúdo</p>
+                      </div>
+                    ) : (
+                      <Accordion type="multiple" className="space-y-2" defaultValue={modules.map(m => m.id)}>
+                        {modules.map((module, moduleIndex) => (
+                          <AccordionItem key={module.id} value={module.id} className="border rounded-lg px-4">
+                            <AccordionTrigger className="hover:no-underline">
+                              <div className="flex items-center gap-3 text-left">
+                                <span className="font-semibold">Módulo {moduleIndex + 1}: {module.title}</span>
+                                <Badge variant="muted" className="text-xs">
+                                  {module.lessons.length} aulas
+                                </Badge>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-2 pb-2">
+                                {module.lessons.map((lesson, lessonIndex) => {
+                                  const isCompleted = completedLessons.includes(lesson.id);
+                                  const canAccess = isEnrolled || isAdmin;
 
-                {/* Instructor */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Sobre o Instrutor</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-start gap-4">
-                      <img 
-                        src={course.instructor.avatar}
-                        alt={course.instructor.name}
-                        className="w-16 h-16 rounded-full"
-                      />
-                      <div>
-                        <h3 className="font-semibold text-lg">{course.instructor.name}</h3>
-                        <p className="text-muted-foreground text-sm mt-1">
-                          {course.instructor.bio}
-                        </p>
-                      </div>
-                    </div>
+                                  return (
+                                    <div 
+                                      key={lesson.id}
+                                      onClick={() => handleLessonClick(lesson)}
+                                      className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                                        canAccess 
+                                          ? 'hover:bg-muted/50 cursor-pointer' 
+                                          : 'opacity-60'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        {isCompleted ? (
+                                          <CheckCircle2 className="h-5 w-5 text-success" />
+                                        ) : canAccess ? (
+                                          <PlayCircle className="h-5 w-5 text-primary" />
+                                        ) : (
+                                          <Lock className="h-5 w-5 text-muted-foreground" />
+                                        )}
+                                        <span className={isCompleted ? "text-muted-foreground" : ""}>
+                                          {lessonIndex + 1}. {lesson.title}
+                                        </span>
+                                      </div>
+                                      <span className="text-sm text-muted-foreground">
+                                        {lesson.duration || '--:--'}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
                   </CardContent>
                 </Card>
               </div>
