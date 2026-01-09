@@ -13,6 +13,7 @@ import {
   Pencil,
   Trash2,
   BookOpen,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -178,6 +179,12 @@ export default function AdminCourses() {
                                 <Link to={`/admin/courses/${course.id}/edit`}>
                                   <Pencil className="h-4 w-4 mr-2" />
                                   Editar
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link to={`/admin/courses/${course.id}/modules`}>
+                                  <Layers className="h-4 w-4 mr-2" />
+                                  Gerenciar Conteúdo
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem 

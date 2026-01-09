@@ -14,7 +14,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminCourses from "./pages/admin/AdminCourses";
 import AdminStudents from "./pages/admin/AdminStudents";
 import CourseForm from "./pages/admin/CourseForm";
+import CourseModules from "./pages/admin/CourseModules";
 import StudentDashboard from "./pages/student/StudentDashboard";
+import LessonPlayer from "./pages/student/LessonPlayer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +56,11 @@ const App = () => (
                 <CourseForm />
               </ProtectedRoute>
             } />
+            <Route path="/admin/courses/:id/modules" element={
+              <ProtectedRoute requiredRole="admin">
+                <CourseModules />
+              </ProtectedRoute>
+            } />
             <Route path="/admin/students" element={
               <ProtectedRoute requiredRole="admin">
                 <AdminStudents />
@@ -69,6 +76,11 @@ const App = () => (
             <Route path="/student/courses" element={
               <ProtectedRoute requiredRole="student">
                 <StudentDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/student/course/:courseId/lesson/:lessonId" element={
+              <ProtectedRoute>
+                <LessonPlayer />
               </ProtectedRoute>
             } />
 
