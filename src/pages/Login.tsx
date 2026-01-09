@@ -1,19 +1,36 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Mail, Lock, ArrowLeft } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { signIn, profile } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Login logic will be implemented with Supabase
-    console.log("Login attempt:", { email, password });
+    setLoading(true);
+
+    try {
+      await signIn(email, password);
+      // Wait a bit for profile to be fetched
+      setTimeout(() => {
+        navigate('/student');
+      }, 500);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.message || 'Erro ao fazer login');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,6 +77,7 @@ export default function Login() {
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -84,14 +102,15 @@ export default function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4">
-                <Button type="submit" className="w-full" size="lg">
-                  Entrar
+                <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                  {loading ? 'Entrando...' : 'Entrar'}
                 </Button>
                 
                 <p className="text-sm text-center text-muted-foreground">

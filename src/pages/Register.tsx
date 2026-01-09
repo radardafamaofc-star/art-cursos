@@ -1,10 +1,12 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Mail, Lock, User, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const benefits = [
   "Acesso a cursos gratuitos",
@@ -17,11 +19,23 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { signUp } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Register logic will be implemented with Supabase
-    console.log("Register attempt:", { name, email, password });
+    setLoading(true);
+
+    try {
+      await signUp(email, password, name);
+      navigate('/student');
+    } catch (error: any) {
+      console.error('Register error:', error);
+      toast.error(error.message || 'Erro ao criar conta');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -102,6 +116,7 @@ export default function Register() {
                       onChange={(e) => setName(e.target.value)}
                       className="pl-10"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -118,6 +133,7 @@ export default function Register() {
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -129,12 +145,13 @@ export default function Register() {
                     <Input
                       id="password"
                       type="password"
-                      placeholder="Mínimo 8 caracteres"
+                      placeholder="Mínimo 6 caracteres"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10"
-                      minLength={8}
+                      minLength={6}
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -153,8 +170,8 @@ export default function Register() {
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4">
-                <Button type="submit" className="w-full" size="lg">
-                  Criar conta
+                <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                  {loading ? 'Criando conta...' : 'Criar conta'}
                 </Button>
                 
                 <p className="text-sm text-center text-muted-foreground">

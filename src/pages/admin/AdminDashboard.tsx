@@ -2,20 +2,20 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
+import { DashboardHeader } from "@/components/layout/DashboardHeader";
+import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { 
-  GraduationCap,
   BookOpen, 
   Users, 
   TrendingUp, 
-  DollarSign,
   Plus,
   MoreVertical,
   Eye,
   Pencil,
   Trash2,
-  LogOut,
-  Settings,
-  LayoutDashboard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -31,106 +31,100 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-const stats = [
-  { title: "Total de Cursos", value: "24", change: "+2", icon: BookOpen, color: "bg-primary/10 text-primary" },
-  { title: "Alunos Ativos", value: "1,234", change: "+12%", icon: Users, color: "bg-success/10 text-success" },
-  { title: "Taxa de Conclusão", value: "78%", change: "+5%", icon: TrendingUp, color: "bg-warning/10 text-warning" },
-  { title: "Receita Mensal", value: "R$ 45.2k", change: "+18%", icon: DollarSign, color: "bg-accent text-accent-foreground" },
-];
-
-const courses = [
-  { id: "1", title: "Desenvolvimento Web Completo", students: 2340, status: "Publicado", category: "Programação" },
-  { id: "2", title: "Marketing Digital Estratégico", students: 1850, status: "Publicado", category: "Marketing" },
-  { id: "3", title: "Design UX/UI Profissional", students: 1560, status: "Publicado", category: "Design" },
-  { id: "4", title: "Python para Data Science", students: 3200, status: "Publicado", category: "Programação" },
-  { id: "5", title: "Gestão de Projetos Ágeis", students: 980, status: "Rascunho", category: "Negócios" },
-];
-
-const recentStudents = [
-  { id: "1", name: "Ana Maria Silva", email: "ana@email.com", course: "Desenvolvimento Web", date: "Há 2 horas" },
-  { id: "2", name: "Carlos Santos", email: "carlos@email.com", course: "Marketing Digital", date: "Há 4 horas" },
-  { id: "3", name: "Julia Costa", email: "julia@email.com", course: "Design UX/UI", date: "Há 6 horas" },
-  { id: "4", name: "Pedro Alves", email: "pedro@email.com", course: "Python Data Science", date: "Há 8 horas" },
-];
+import { toast } from "sonner";
 
 export default function AdminDashboard() {
+  const { profile } = useAuth();
+
+  const { data: courses, refetch: refetchCourses } = useQuery({
+    queryKey: ['admin-courses'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: enrollmentCounts } = useQuery({
+    queryKey: ['enrollment-counts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('course_id');
+      if (error) throw error;
+      
+      const counts: Record<string, number> = {};
+      data.forEach(e => {
+        counts[e.course_id] = (counts[e.course_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+
+  const { data: profiles } = useQuery({
+    queryKey: ['all-profiles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'student')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const handleDeleteCourse = async (courseId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este curso?')) return;
+
+    const { error } = await supabase
+      .from('courses')
+      .delete()
+      .eq('id', courseId);
+
+    if (error) {
+      toast.error('Erro ao excluir curso');
+    } else {
+      toast.success('Curso excluído com sucesso');
+      refetchCourses();
+    }
+  };
+
+  const totalStudents = profiles?.length || 0;
+  const totalCourses = courses?.length || 0;
+  const publishedCourses = courses?.filter(c => c.status === 'published').length || 0;
+
+  const stats = [
+    { title: "Total de Cursos", value: totalCourses.toString(), icon: BookOpen, color: "bg-primary/10 text-primary" },
+    { title: "Alunos Ativos", value: totalStudents.toString(), icon: Users, color: "bg-success/10 text-success" },
+    { title: "Cursos Publicados", value: publishedCourses.toString(), icon: TrendingUp, color: "bg-warning/10 text-warning" },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-64 bg-card border-r hidden lg:block">
-        <div className="p-6">
-          <Link to="/" className="flex items-center gap-2 font-bold text-xl">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-primary">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span>EduPlatform</span>
-          </Link>
-        </div>
+      <DashboardSidebar />
 
-        <nav className="px-4 space-y-1">
-          <Link 
-            to="/admin" 
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/10 text-primary font-medium"
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            Dashboard
-          </Link>
-          <Link 
-            to="/admin/courses" 
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <BookOpen className="h-5 w-5" />
-            Cursos
-          </Link>
-          <Link 
-            to="/admin/students" 
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <Users className="h-5 w-5" />
-            Alunos
-          </Link>
-          <Link 
-            to="/admin/settings" 
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <Settings className="h-5 w-5" />
-            Configurações
-          </Link>
-        </nav>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t">
-          <Button variant="ghost" className="w-full justify-start text-muted-foreground" asChild>
-            <Link to="/">
-              <LogOut className="h-5 w-5 mr-3" />
-              Sair
-            </Link>
-          </Button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
       <div className="lg:pl-64">
-        {/* Header */}
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b">
-          <div className="flex items-center justify-between h-16 px-6">
-            <div>
-              <h1 className="text-xl font-bold">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Bem-vindo de volta, Admin!</p>
-            </div>
+        <DashboardHeader 
+          title="Dashboard"
+          subtitle={`Bem-vindo de volta, ${profile?.full_name || 'Admin'}!`}
+          actions={
             <Button asChild>
               <Link to="/admin/courses/new">
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Curso
               </Link>
             </Button>
-          </div>
-        </header>
+          }
+        />
 
-        {/* Content */}
         <main className="p-6 space-y-6">
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {stats.map((stat, index) => (
               <Card key={stat.title} className="animate-fade-in" style={{ animationDelay: `${index * 50}ms` }}>
                 <CardContent className="p-6">
@@ -138,7 +132,6 @@ export default function AdminDashboard() {
                     <div>
                       <p className="text-sm text-muted-foreground">{stat.title}</p>
                       <p className="text-2xl font-bold mt-1">{stat.value}</p>
-                      <p className="text-xs text-success mt-1">{stat.change} este mês</p>
                     </div>
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
                       <stat.icon className="h-6 w-6" />
@@ -162,56 +155,73 @@ export default function AdminDashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Curso</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Alunos</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {courses.map((course) => (
-                      <TableRow key={course.id}>
-                        <TableCell className="font-medium">{course.title}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{course.category}</Badge>
-                        </TableCell>
-                        <TableCell>{course.students}</TableCell>
-                        <TableCell>
-                          <Badge variant={course.status === "Publicado" ? "success" : "muted"}>
-                            {course.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Eye className="h-4 w-4 mr-2" />
-                                Visualizar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
+                {courses && courses.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Curso</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Alunos</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {courses.slice(0, 5).map((course) => (
+                        <TableRow key={course.id}>
+                          <TableCell className="font-medium">{course.title}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{course.category}</Badge>
+                          </TableCell>
+                          <TableCell>{enrollmentCounts?.[course.id] || 0}</TableCell>
+                          <TableCell>
+                            <Badge variant={course.status === "published" ? "success" : "muted"}>
+                              {course.status === "published" ? "Publicado" : "Rascunho"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/course/${course.id}`}>
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Visualizar
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/admin/courses/${course.id}/edit`}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Editar
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => handleDeleteCourse(course.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Nenhum curso cadastrado ainda.</p>
+                    <Button asChild className="mt-4">
+                      <Link to="/admin/courses/new">Criar primeiro curso</Link>
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -219,21 +229,26 @@ export default function AdminDashboard() {
             <Card className="animate-fade-in delay-300">
               <CardHeader>
                 <CardTitle>Alunos Recentes</CardTitle>
-                <CardDescription>Últimas matrículas</CardDescription>
+                <CardDescription>Últimos cadastros</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {recentStudents.map((student) => (
-                  <div key={student.id} className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-                      {student.name.charAt(0)}
+                {profiles && profiles.length > 0 ? (
+                  profiles.map((student) => (
+                    <div key={student.id} className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+                        {student.full_name?.charAt(0) || 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{student.full_name || 'Sem nome'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(student.created_at).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{student.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{student.course}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{student.date}</span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-center text-muted-foreground py-4">Nenhum aluno cadastrado</p>
+                )}
               </CardContent>
             </Card>
           </div>
