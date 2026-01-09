@@ -17,10 +17,12 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  profileError: string | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refetchProfile: () => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -30,28 +32,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchOrCreateProfile = async (user: User) => {
+  const fetchOrCreateProfile = async (currentUser: User): Promise<Profile | null> => {
+    setProfileError(null);
+    
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', currentUser.id)
       .maybeSingle();
 
     if (error) {
       console.error('Error fetching profile:', error);
+      setProfileError(error.message);
       return null;
     }
 
     if (data) return data as Profile;
 
-    const fullName = (user.user_metadata as any)?.full_name ?? null;
+    // Profile doesn't exist, create one
+    const fullName = (currentUser.user_metadata as any)?.full_name ?? null;
 
     const { data: created, error: createError } = await supabase
       .from('profiles')
       .insert({
-        user_id: user.id,
+        user_id: currentUser.id,
         full_name: fullName,
         role: 'student',
       })
@@ -60,10 +67,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (createError) {
       console.error('Error creating profile:', createError);
+      setProfileError(createError.message);
       return null;
     }
 
     return created as Profile;
+  };
+
+  const refetchProfile = async () => {
+    if (user) {
+      setLoading(true);
+      const fetchedProfile = await fetchOrCreateProfile(user);
+      setProfile(fetchedProfile);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -145,10 +162,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         profile,
+        profileError,
         loading,
         signUp,
         signIn,
         signOut,
+        refetchProfile,
         isAdmin,
       }}
     >
