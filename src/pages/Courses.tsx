@@ -1,90 +1,60 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, SlidersHorizontal } from "lucide-react";
-
-const allCourses = [
-  {
-    id: "1",
-    title: "Desenvolvimento Web Completo",
-    description: "Aprenda HTML, CSS, JavaScript e React do zero ao avançado",
-    thumbnail: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&auto=format&fit=crop&q=60",
-    instructor: "João Silva",
-    duration: "40h",
-    students: 2340,
-    modules: 12,
-    category: "Programação",
-  },
-  {
-    id: "2",
-    title: "Marketing Digital Estratégico",
-    description: "Domine as técnicas de marketing digital para impulsionar negócios",
-    thumbnail: "https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800&auto=format&fit=crop&q=60",
-    instructor: "Maria Santos",
-    duration: "25h",
-    students: 1850,
-    modules: 8,
-    category: "Marketing",
-  },
-  {
-    id: "3",
-    title: "Design UX/UI Profissional",
-    description: "Crie interfaces incríveis e experiências memoráveis para usuários",
-    thumbnail: "https://images.unsplash.com/photo-1561070791-2526d30994b5?w=800&auto=format&fit=crop&q=60",
-    instructor: "Ana Costa",
-    duration: "35h",
-    students: 1560,
-    modules: 10,
-    category: "Design",
-  },
-  {
-    id: "4",
-    title: "Python para Data Science",
-    description: "Análise de dados e machine learning com Python",
-    thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=60",
-    instructor: "Carlos Mendes",
-    duration: "50h",
-    students: 3200,
-    modules: 15,
-    category: "Programação",
-  },
-  {
-    id: "5",
-    title: "Gestão de Projetos Ágeis",
-    description: "Scrum, Kanban e metodologias ágeis na prática",
-    thumbnail: "https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?w=800&auto=format&fit=crop&q=60",
-    instructor: "Paula Lima",
-    duration: "20h",
-    students: 980,
-    modules: 6,
-    category: "Negócios",
-  },
-  {
-    id: "6",
-    title: "Fotografia Profissional",
-    description: "Técnicas de fotografia e edição de imagens",
-    thumbnail: "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&auto=format&fit=crop&q=60",
-    instructor: "Ricardo Alves",
-    duration: "30h",
-    students: 1200,
-    modules: 9,
-    category: "Design",
-  },
-];
-
-const categories = ["Todos", "Programação", "Marketing", "Design", "Negócios"];
+import { Search, SlidersHorizontal, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Courses() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todos");
 
-  const filteredCourses = allCourses.filter((course) => {
+  // Fetch courses from database
+  const { data: courses = [], isLoading } = useQuery({
+    queryKey: ["published-courses"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*, modules(id)")
+        .eq("status", "published")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Get unique categories from courses
+  const categories = useMemo(() => {
+    const cats = new Set(courses.map((c) => c.category));
+    return ["Todos", ...Array.from(cats)];
+  }, [courses]);
+
+  // Count enrollments for each course
+  const { data: enrollmentCounts = {} } = useQuery({
+    queryKey: ["enrollment-counts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("enrollments")
+        .select("course_id");
+
+      if (error) throw error;
+      
+      const counts: Record<string, number> = {};
+      data?.forEach((e) => {
+        counts[e.course_id] = (counts[e.course_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
+
+  const filteredCourses = courses.filter((course) => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (course.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     const matchesCategory = selectedCategory === "Todos" || course.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -143,7 +113,11 @@ export default function Courses() {
             </p>
 
             {/* Courses Grid */}
-            {filteredCourses.length > 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : filteredCourses.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredCourses.map((course, index) => (
                   <div 
@@ -151,7 +125,17 @@ export default function Courses() {
                     className="animate-fade-in"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <CourseCard {...course} />
+                    <CourseCard 
+                      id={course.id}
+                      title={course.title}
+                      description={course.description || ""}
+                      thumbnail={course.thumbnail_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop&q=60"}
+                      instructor="Instrutor"
+                      duration={course.duration || "0h"}
+                      students={enrollmentCounts[course.id] || 0}
+                      modules={course.modules?.length || 0}
+                      category={course.category}
+                    />
                   </div>
                 ))}
               </div>
