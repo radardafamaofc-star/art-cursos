@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Mail, Lock, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -12,8 +12,16 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, profile } = useAuth();
+  const { signIn, user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect when user and profile are loaded
+  useEffect(() => {
+    if (user && profile && !authLoading) {
+      const redirectPath = profile.role === 'admin' ? '/admin' : '/student';
+      navigate(redirectPath, { replace: true });
+    }
+  }, [user, profile, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,14 +29,10 @@ export default function Login() {
 
     try {
       await signIn(email, password);
-      // Wait a bit for profile to be fetched
-      setTimeout(() => {
-        navigate('/student');
-      }, 500);
+      // The useEffect will handle the redirect once profile is loaded
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.message || 'Erro ao fazer login');
-    } finally {
       setLoading(false);
     }
   };
@@ -109,7 +113,7 @@ export default function Login() {
               </CardContent>
 
               <CardFooter className="flex flex-col gap-4">
-                <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                <Button type="submit" className="w-full" size="lg" disabled={loading || authLoading}>
                   {loading ? 'Entrando...' : 'Entrar'}
                 </Button>
                 
