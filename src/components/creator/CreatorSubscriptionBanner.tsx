@@ -51,88 +51,91 @@ export function CreatorSubscriptionBanner() {
   const daysRemaining = getDaysRemaining();
   const showRenewButton = daysRemaining <= 7 && daysRemaining > 0;
   const isExpired = daysRemaining === 0 && subscription;
-  
-  // Check if user has subscription (is a creator) - either professor role OR has active subscription
-  const isCreator = profile.role === 'professor' || subscription;
 
-  // Creator with active subscription - show countdown
-  if (isCreator && subscription && !isExpired) {
-    return (
-      <>
-        <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-primary" />
-              <span className="text-muted-foreground">
-                Sua assinatura expira em{" "}
-                <span className={`font-semibold ${daysRemaining <= 7 ? 'text-destructive' : 'text-primary'}`}>
-                  {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'}
+  // Only professors see the countdown
+  if (profile.role === 'professor') {
+    // Professor with active subscription - show countdown
+    if (subscription && !isExpired) {
+      return (
+        <>
+          <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-primary" />
+                <span className="text-muted-foreground">
+                  Sua assinatura expira em{" "}
+                  <span className={`font-semibold ${daysRemaining <= 7 ? 'text-destructive' : 'text-primary'}`}>
+                    {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'}
+                  </span>
                 </span>
-              </span>
+              </div>
+              
+              {showRenewButton && (
+                <Button
+                  onClick={() => setIsModalOpen(true)}
+                  className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-primary px-4"
+                  size="sm"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Renovar
+                </Button>
+              )}
             </div>
-            
-            {showRenewButton && (
+          </div>
+
+          <CreatorSubscriptionModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            adminId={ADMIN_USER_ID}
+            isRenewal={true}
+            onSuccess={() => {
+              setIsModalOpen(false);
+              window.location.href = '/student?subscription=renewed';
+            }}
+          />
+        </>
+      );
+    }
+
+    // Professor with expired subscription
+    if (isExpired) {
+      return (
+        <>
+          <div className="w-full flex justify-center py-3 bg-destructive/10 border-b border-destructive/20">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-destructive font-medium">
+                Sua assinatura expirou
+              </span>
               <Button
                 onClick={() => setIsModalOpen(true)}
                 className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-primary px-4"
                 size="sm"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Renovar
+                Renovar Agora
               </Button>
-            )}
+            </div>
           </div>
-        </div>
 
-        <CreatorSubscriptionModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          adminId={ADMIN_USER_ID}
-          isRenewal={true}
-          onSuccess={() => {
-            setIsModalOpen(false);
-            window.location.href = '/student?subscription=renewed';
-          }}
-        />
-      </>
-    );
+          <CreatorSubscriptionModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            adminId={ADMIN_USER_ID}
+            isRenewal={true}
+            onSuccess={() => {
+              setIsModalOpen(false);
+              window.location.href = '/student?subscription=renewed';
+            }}
+          />
+        </>
+      );
+    }
+
+    // Professor without subscription data (shouldn't happen normally)
+    return null;
   }
 
-  // Creator with expired subscription
-  if (isCreator && isExpired) {
-    return (
-      <>
-        <div className="w-full flex justify-center py-3 bg-destructive/10 border-b border-destructive/20">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-destructive font-medium">
-              Sua assinatura expirou
-            </span>
-            <Button
-              onClick={() => setIsModalOpen(true)}
-              className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-primary px-4"
-              size="sm"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Renovar Agora
-            </Button>
-          </div>
-        </div>
-
-        <CreatorSubscriptionModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          adminId={ADMIN_USER_ID}
-          isRenewal={true}
-          onSuccess={() => {
-            setIsModalOpen(false);
-            window.location.href = '/student?subscription=renewed';
-          }}
-        />
-      </>
-    );
-  }
-
-  // User is NOT a creator - show "Become Creator" button
+  // Students see "Become Creator" button
   return (
     <>
       <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
