@@ -50,7 +50,7 @@ export function DashboardSidebar() {
     { to: '/student/courses', icon: BookOpen, label: 'Meus Cursos' },
     { to: '/courses', icon: BookMarked, label: 'Explorar' },
     { to: '/student/certificates', icon: Award, label: 'Certificados' },
-    { to: '/admin/settings', icon: Settings, label: 'Configurações' },
+    { to: '/student/settings', icon: Settings, label: 'Configurações' },
   ];
 
   const links = isAdmin ? adminLinks : isProfessor ? professorLinks : studentLinks;
