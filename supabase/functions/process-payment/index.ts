@@ -120,6 +120,13 @@ serve(async (req) => {
 
 // AbacatePay Payment (PIX)
 async function processAbacatePayPayment(config: any, course: any, customer: any, amount: number) {
+  // Get the frontend URL from environment or use a fallback approach
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  // Extract project ref from supabase URL (e.g., https://abcdef.supabase.co -> abcdef)
+  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || "";
+  // Construct the frontend URL - for Lovable projects
+  const frontendUrl = `https://${projectRef}.lovable.app`;
+  
   const response = await fetch("https://api.abacatepay.com/v1/billing/create", {
     method: "POST",
     headers: {
@@ -143,8 +150,8 @@ async function processAbacatePayPayment(config: any, course: any, customer: any,
         cellphone: customer.phone,
         taxId: customer.cpf.replace(/\D/g, ""),
       },
-      returnUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
-      completionUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
+      returnUrl: `${frontendUrl}/student?payment=success`,
+      completionUrl: `${frontendUrl}/student?payment=success`,
     }),
   });
 
