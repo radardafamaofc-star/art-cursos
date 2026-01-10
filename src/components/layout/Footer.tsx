@@ -11,7 +11,7 @@ export function Footer() {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-primary">
                 <GraduationCap className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span>EduPlatform</span>
+              <span>Art Cursos</span>
             </Link>
             <p className="text-sm text-muted-foreground">
               Transformando vidas através da educação online de qualidade.
@@ -46,7 +46,7 @@ export function Footer() {
         </div>
 
         <div className="mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
-          <p>© 2025 EduPlatform. Todos os direitos reservados.</p>
+          <p>© 2025 Art Cursos. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>

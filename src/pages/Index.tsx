@@ -183,7 +183,7 @@ export default function Index() {
               <div>
                 <h2 className="text-3xl md:text-4xl font-bold mb-6">
                   Por que escolher a{" "}
-                  <span className="text-gradient">EduPlatform</span>?
+                  <span className="text-gradient">Art Cursos</span>?
                 </h2>
                 <p className="text-muted-foreground mb-8">
                   Oferecemos uma experiência de aprendizado completa, com recursos exclusivos para garantir seu sucesso profissional.
