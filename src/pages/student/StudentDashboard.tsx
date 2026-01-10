@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
-import { BecomeCreatorBanner } from "@/components/creator/BecomeCreatorBanner";
+import { CreatorSubscriptionBanner } from "@/components/creator/CreatorSubscriptionBanner";
 import { CreatorBadge } from "@/components/creator/CreatorBadge";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,6 +29,13 @@ export default function StudentDashboard() {
     const subscriptionStatus = searchParams.get('subscription');
     if (subscriptionStatus === 'success') {
       toast.success("Parabéns! Você agora é um Criador de Conteúdo!");
+      // Refresh profile and subscription data
+      refetchProfile();
+      queryClient.invalidateQueries({ queryKey: ['creator-subscription'] });
+      // Remove the query param
+      setSearchParams({});
+    } else if (subscriptionStatus === 'renewed') {
+      toast.success("Assinatura renovada com sucesso! +30 dias adicionados.");
       // Refresh profile and subscription data
       refetchProfile();
       queryClient.invalidateQueries({ queryKey: ['creator-subscription'] });
@@ -84,7 +91,7 @@ export default function StudentDashboard() {
       <DashboardSidebar />
 
       <div className="lg:pl-64">
-        <BecomeCreatorBanner />
+        <CreatorSubscriptionBanner />
         
         <DashboardHeader 
           title="Minha Área"

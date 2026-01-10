@@ -19,6 +19,7 @@ interface CreatorSubscriptionModalProps {
   onClose: () => void;
   adminId: string;
   onSuccess: () => void;
+  isRenewal?: boolean;
 }
 
 interface CustomerData {
@@ -50,6 +51,7 @@ export function CreatorSubscriptionModal({
   onClose,
   adminId,
   onSuccess,
+  isRenewal = false,
 }: CreatorSubscriptionModalProps) {
   const [step, setStep] = useState<Step>("info");
   const [loading, setLoading] = useState(false);
@@ -174,13 +176,14 @@ export function CreatorSubscriptionModal({
 
     try {
       // Pass the current origin for proper redirect after payment
-      const returnUrl = `${window.location.origin}/student?subscription=success`;
+      const returnUrl = `${window.location.origin}/student?subscription=${isRenewal ? 'renewed' : 'success'}`;
       
       const { data, error } = await supabase.functions.invoke("process-creator-subscription", {
         body: {
           gateway: selectedGateway,
           amount: SUBSCRIPTION_PRICE,
           returnUrl,
+          isRenewal,
           customerData: {
             name: customerData.fullName,
             email: customerData.email,
@@ -251,15 +254,15 @@ export function CreatorSubscriptionModal({
             {step === "info" && (
               <>
                 <Crown className="h-5 w-5 text-primary" />
-                Torne-se um Criador
+                {isRenewal ? "Renovar Assinatura" : "Torne-se um Criador"}
               </>
             )}
-            {step === "form" && "Dados para Assinatura"}
+            {step === "form" && (isRenewal ? "Dados para Renovação" : "Dados para Assinatura")}
             {step === "gateway" && "Método de Pagamento"}
             {step === "pix" && "Pague com PIX"}
           </DialogTitle>
           <DialogDescription>
-            {step === "info" && "Comece a criar e vender seus cursos"}
+            {step === "info" && (isRenewal ? "Renove sua assinatura por mais 30 dias" : "Comece a criar e vender seus cursos")}
             {step === "form" && "Preencha seus dados para continuar"}
             {step === "gateway" && "Escolha como deseja pagar"}
             {step === "pix" && "Escaneie o QR Code ou copie o código"}
@@ -277,21 +280,28 @@ export function CreatorSubscriptionModal({
               <>
                 <div className="bg-gradient-primary rounded-xl p-6 text-primary-foreground text-center">
                   <Sparkles className="h-10 w-10 mx-auto mb-3" />
-                  <h3 className="text-xl font-bold mb-1">Plano Criador</h3>
+                  <h3 className="text-xl font-bold mb-1">
+                    {isRenewal ? "Renovação do Plano" : "Plano Criador"}
+                  </h3>
                   <p className="text-3xl font-bold">{formatPrice(SUBSCRIPTION_PRICE)}<span className="text-sm font-normal">/mês</span></p>
+                  {isRenewal && (
+                    <p className="text-sm mt-2 opacity-90">+30 dias adicionados à sua assinatura</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-sm">O que está incluso:</h4>
-                  <ul className="space-y-2">
-                    {benefits.map((benefit, index) => (
-                      <li key={index} className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-                        <span>{benefit}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {!isRenewal && (
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm">O que está incluso:</h4>
+                    <ul className="space-y-2">
+                      {benefits.map((benefit, index) => (
+                        <li key={index} className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <Button
                   className="w-full bg-gradient-primary"
@@ -304,7 +314,7 @@ export function CreatorSubscriptionModal({
                   ) : (
                     <>
                       <Crown className="h-4 w-4 mr-2" />
-                      Quero ser Criador
+                      {isRenewal ? "Renovar Assinatura" : "Quero ser Criador"}
                     </>
                   )}
                 </Button>

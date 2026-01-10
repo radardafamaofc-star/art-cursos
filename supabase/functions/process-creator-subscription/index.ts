@@ -32,7 +32,7 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    const { gateway, amount, customerData, returnUrl } = await req.json();
+    const { gateway, amount, customerData, returnUrl, isRenewal } = await req.json();
 
     if (!gateway || !amount) {
       throw new Error("Dados incompletos");
@@ -83,6 +83,27 @@ serve(async (req) => {
 
     // Create subscription record and update user role to professor
     if (paymentResult.success || paymentResult.redirectUrl || paymentResult.pixCode) {
+      // Calculate new expiration date
+      let newExpiresAt: Date;
+      
+      if (isRenewal) {
+        // For renewal: get current subscription and add 30 days from current expiration
+        const { data: currentSub } = await supabase
+          .from("creator_subscriptions")
+          .select("expires_at")
+          .eq("user_id", userData.user.id)
+          .eq("status", "active")
+          .maybeSingle();
+        
+        const currentExpiration = currentSub?.expires_at ? new Date(currentSub.expires_at) : new Date();
+        // If expired, start from now; otherwise add 30 days to current expiration
+        const baseDate = currentExpiration > new Date() ? currentExpiration : new Date();
+        newExpiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      } else {
+        // For new subscription: 30 days from now
+        newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      }
+
       // Create/update subscription
       await supabase.from("creator_subscriptions").upsert({
         user_id: userData.user.id,
@@ -91,7 +112,7 @@ serve(async (req) => {
         amount: SUBSCRIPTION_AMOUNT,
         status: "active",
         activated_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+        expires_at: newExpiresAt.toISOString(),
       }, {
         onConflict: 'user_id'
       });
