@@ -24,7 +24,7 @@ interface CheckoutModalProps {
 }
 
 const GATEWAY_INFO: Record<string, { name: string; logo: string; methods: string[] }> = {
-  stripe: { name: "Stripe", logo: "💳", methods: ["Cartão de Crédito"] },
+  abacatepay: { name: "AbacatePay", logo: "🥑", methods: ["PIX"] },
   asaas: { name: "Asaas", logo: "🏦", methods: ["PIX", "Boleto", "Cartão"] },
   mercadopago: { name: "Mercado Pago", logo: "🛒", methods: ["PIX", "Cartão", "Boleto"] },
   pushinpay: { name: "PushinPay", logo: "⚡", methods: ["PIX"] },

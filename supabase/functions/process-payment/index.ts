@@ -63,8 +63,8 @@ serve(async (req) => {
 
     // Process payment based on gateway
     switch (gateway) {
-      case "stripe":
-        paymentResult = await processStripePayment(paymentConfig, course, userData.user, amount);
+      case "abacatepay":
+        paymentResult = await processAbacatePayPayment(paymentConfig, course, userData.user, amount);
         break;
       case "asaas":
         paymentResult = await processAsaasPayment(paymentConfig, course, userData.user, amount, paymentMethod);
@@ -110,40 +110,46 @@ serve(async (req) => {
   }
 });
 
-// Stripe Payment
-async function processStripePayment(config: any, course: any, user: any, amount: number) {
-  const stripe = await import("https://esm.sh/stripe@14.0.0");
-  const stripeClient = new stripe.default(config.secret_key);
-
-  const session = await stripeClient.checkout.sessions.create({
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "brl",
-          product_data: {
-            name: course.title,
-          },
-          unit_amount: Math.round(amount * 100),
-        },
-        quantity: 1,
-      },
-    ],
-    mode: "payment",
-    success_url: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
-    cancel_url: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=cancelled`,
-    customer_email: user.email,
-    metadata: {
-      course_id: course.id,
-      user_id: user.id,
+// AbacatePay Payment (PIX)
+async function processAbacatePayPayment(config: any, course: any, user: any, amount: number) {
+  const response = await fetch("https://api.abacatepay.com/v1/billing/create", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${config.secret_key}`,
     },
+    body: JSON.stringify({
+      frequency: "ONE_TIME",
+      methods: ["PIX"],
+      products: [
+        {
+          externalId: course.id,
+          name: course.title,
+          quantity: 1,
+          price: Math.round(amount * 100), // Amount in cents
+        },
+      ],
+      customer: {
+        email: user.email,
+        name: user.user_metadata?.full_name || user.email,
+      },
+      returnUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
+      completionUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
+    }),
   });
+
+  const result = await response.json();
+
+  if (result.error) {
+    throw new Error(result.error || "Erro ao criar cobrança no AbacatePay");
+  }
 
   return {
     success: true,
-    redirectUrl: session.url,
-    paymentId: session.id,
+    redirectUrl: result.data?.url || result.url,
+    paymentId: result.data?.id || result.id,
     status: "pending",
+    data: result,
   };
 }
 

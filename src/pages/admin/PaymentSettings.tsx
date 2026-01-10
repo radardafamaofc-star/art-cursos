@@ -25,14 +25,13 @@ interface PaymentConfig {
 
 const GATEWAYS = [
   {
-    id: "stripe",
-    name: "Stripe",
-    description: "Aceite pagamentos internacionais com cartão de crédito",
-    logo: "💳",
+    id: "abacatepay",
+    name: "AbacatePay",
+    description: "Gateway brasileiro com PIX rápido e seguro",
+    logo: "🥑",
     fields: [
-      { key: "public_key", label: "Chave Pública (Publishable Key)", placeholder: "pk_live_..." },
-      { key: "secret_key", label: "Chave Secreta (Secret Key)", placeholder: "sk_live_...", secret: true },
-      { key: "webhook_secret", label: "Webhook Secret", placeholder: "whsec_...", secret: true },
+      { key: "secret_key", label: "API Key", placeholder: "Sua chave de API", secret: true },
+      { key: "webhook_secret", label: "Webhook Secret", placeholder: "Secret do webhook", secret: true },
     ],
   },
   {
@@ -73,7 +72,7 @@ const GATEWAYS = [
 export default function PaymentSettings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("stripe");
+  const [activeTab, setActiveTab] = useState("abacatepay");
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [configs, setConfigs] = useState<Record<string, PaymentConfig>>({});
   const [saving, setSaving] = useState<string | null>(null);
@@ -362,11 +361,11 @@ export default function PaymentSettings() {
 
                       <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
                         <p className="font-medium mb-2">📌 Instruções:</p>
-                        {gateway.id === "stripe" && (
+                        {gateway.id === "abacatepay" && (
                           <ul className="list-disc list-inside space-y-1">
-                            <li>Acesse o <a href="https://dashboard.stripe.com/apikeys" target="_blank" className="text-primary hover:underline">Stripe Dashboard</a></li>
-                            <li>Copie as chaves de API (use chaves de produção para receber pagamentos reais)</li>
-                            <li>Configure o webhook em Developers → Webhooks</li>
+                            <li>Acesse <a href="https://abacatepay.com" target="_blank" className="text-primary hover:underline">AbacatePay</a> e crie uma conta</li>
+                            <li>Vá em Configurações → API</li>
+                            <li>Copie sua chave de API</li>
                           </ul>
                         )}
                         {gateway.id === "asaas" && (
