@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GraduationCap, Mail, Lock, ArrowLeft } from "lucide-react";
+import { GraduationCap, User, Lock, ArrowLeft } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -30,7 +30,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const { profile: userProfile } = await signIn(email, password);
+      // Check if login is an email or custom login
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      const authEmail = isEmail ? email : `${email}@artcursos.local`;
+      
+      const { profile: userProfile } = await signIn(authEmail, password);
       // Navigate immediately after successful login with profile
       const from = (location.state as any)?.from?.pathname;
       const redirectPath = from || (userProfile.role === 'admin' ? '/admin' : '/student');
@@ -84,13 +88,13 @@ export default function Login() {
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
+                  <Label htmlFor="email">Login</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="email"
-                      type="email"
-                      placeholder="seu@email.com"
+                      type="text"
+                      placeholder="Email ou nome de usuário"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10"
