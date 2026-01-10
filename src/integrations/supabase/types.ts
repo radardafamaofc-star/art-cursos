@@ -126,18 +126,24 @@ export type Database = {
       }
       enrollments: {
         Row: {
+          blocked: boolean
+          blocked_at: string | null
           course_id: string
           enrolled_at: string
           id: string
           user_id: string
         }
         Insert: {
+          blocked?: boolean
+          blocked_at?: string | null
           course_id: string
           enrolled_at?: string
           id?: string
           user_id: string
         }
         Update: {
+          blocked?: boolean
+          blocked_at?: string | null
           course_id?: string
           enrolled_at?: string
           id?: string
