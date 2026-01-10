@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, GripVertical, Pencil, Trash2, Video, FileText } from "lucide-react";
+import { ArrowLeft, Plus, GripVertical, Pencil, Trash2, Video, FileText, Award } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface Module {
@@ -261,6 +261,12 @@ export default function CourseModules() {
                 <Link to="/admin/courses">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Voltar
+                </Link>
+              </Button>
+              <Button variant="secondary" asChild>
+                <Link to={`/admin/courses/${courseId}/certificate`}>
+                  <Award className="h-4 w-4 mr-2" />
+                  Certificado
                 </Link>
               </Button>
               <Dialog open={moduleDialogOpen} onOpenChange={(open) => { if (!open) resetModuleForm(); setModuleDialogOpen(open); }}>
