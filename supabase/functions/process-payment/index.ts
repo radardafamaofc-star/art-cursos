@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function getDefaultFrontendOrigin(): string | null {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return null;
+  return `https://${projectRef}.lovable.app`;
+}
+
+function computeStudentDashboardReturnUrl(req: Request): string {
+  const targetPath = "/student?payment=success";
+  const origin = req.headers.get("origin")?.replace(/\/$/, "");
+  if (origin) return `${origin}${targetPath}`;
+
+  const defaultOrigin = getDefaultFrontendOrigin();
+  if (defaultOrigin) return `${defaultOrigin}${targetPath}`;
+
+  throw new Error("Não foi possível determinar a URL de retorno");
+}
+
 serve(async (req) => {
   // Handle CORS
   if (req.method === "OPTIONS") {
@@ -69,10 +87,13 @@ serve(async (req) => {
 
     let paymentResult: any = { success: false };
 
+    // Always return to the student dashboard after payment.
+    const returnUrl = computeStudentDashboardReturnUrl(req);
+
     // Process payment based on gateway
     switch (gateway) {
       case "abacatepay":
-        paymentResult = await processAbacatePayPayment(paymentConfig, course, customer, amount);
+        paymentResult = await processAbacatePayPayment(paymentConfig, course, customer, amount, returnUrl);
         break;
       case "asaas":
         paymentResult = await processAsaasPayment(paymentConfig, course, customer, amount, paymentMethod);
@@ -119,14 +140,13 @@ serve(async (req) => {
 });
 
 // AbacatePay Payment (PIX)
-async function processAbacatePayPayment(config: any, course: any, customer: any, amount: number) {
-  // Get the frontend URL from environment or use a fallback approach
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  // Extract project ref from supabase URL (e.g., https://abcdef.supabase.co -> abcdef)
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || "";
-  // Construct the frontend URL - for Lovable projects
-  const frontendUrl = `https://${projectRef}.lovable.app`;
-  
+async function processAbacatePayPayment(
+  config: any,
+  course: any,
+  customer: any,
+  amount: number,
+  returnUrl: string
+) {
   const response = await fetch("https://api.abacatepay.com/v1/billing/create", {
     method: "POST",
     headers: {
@@ -150,8 +170,8 @@ async function processAbacatePayPayment(config: any, course: any, customer: any,
         cellphone: customer.phone,
         taxId: customer.cpf.replace(/\D/g, ""),
       },
-      returnUrl: `${frontendUrl}/student?payment=success`,
-      completionUrl: `${frontendUrl}/student?payment=success`,
+      returnUrl,
+      completionUrl: returnUrl,
     }),
   });
 
@@ -164,7 +184,7 @@ async function processAbacatePayPayment(config: any, course: any, customer: any,
 
   // AbacatePay returns the PIX data in the response
   const billingData = result.data || result;
-  
+
   return {
     success: true,
     redirectUrl: billingData.url,
@@ -341,3 +361,4 @@ async function processPushinPayPayment(config: any, course: any, customer: any, 
     data: result,
   };
 }
+
