@@ -13,6 +13,7 @@ import {
   Plus,
   UserCog,
   CreditCard,
+  Crown,
 } from 'lucide-react';
 
 interface SidebarLink {
@@ -115,8 +116,13 @@ export function DashboardSidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{profile?.full_name || 'Usuário'}</p>
-            <p className="text-xs text-muted-foreground">
-              {isAdmin ? 'Administrador' : isProfessor ? 'Professor' : 'Aluno'}
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {isAdmin ? 'Administrador' : isProfessor ? (
+                <>
+                  <Crown className="h-3 w-3 text-amber-500" />
+                  Professor
+                </>
+              ) : 'Aluno'}
             </p>
           </div>
         </div>
