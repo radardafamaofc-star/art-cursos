@@ -108,7 +108,7 @@ serve(async (req) => {
         throw new Error("Gateway não suportado");
     }
 
-    // Create payment record
+    // Create payment record and enrollment
     if (paymentResult.success || paymentResult.redirectUrl || paymentResult.pixCode) {
       await supabase.from("payments").insert({
         course_id: courseId,
@@ -121,6 +121,23 @@ serve(async (req) => {
         payment_method: paymentMethod || "card",
         payment_data: paymentResult.data || {},
       });
+
+      // Create enrollment immediately so user has access to the course
+      // Check if enrollment already exists
+      const { data: existingEnrollment } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("user_id", userData.user.id)
+        .eq("course_id", courseId)
+        .maybeSingle();
+
+      if (!existingEnrollment) {
+        await supabase.from("enrollments").insert({
+          user_id: userData.user.id,
+          course_id: courseId,
+        });
+        console.log("Enrollment created for user:", userData.user.id, "course:", courseId);
+      }
     }
 
     return new Response(JSON.stringify(paymentResult), {
