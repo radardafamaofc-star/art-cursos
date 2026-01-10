@@ -196,6 +196,98 @@ export type Database = {
           },
         ]
       }
+      payment_configurations: {
+        Row: {
+          additional_config: Json | null
+          created_at: string
+          gateway: string
+          id: string
+          is_active: boolean | null
+          public_key: string | null
+          secret_key: string | null
+          updated_at: string
+          user_id: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          additional_config?: Json | null
+          created_at?: string
+          gateway: string
+          id?: string
+          is_active?: boolean | null
+          public_key?: string | null
+          secret_key?: string | null
+          updated_at?: string
+          user_id: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          additional_config?: Json | null
+          created_at?: string
+          gateway?: string
+          id?: string
+          is_active?: boolean | null
+          public_key?: string | null
+          secret_key?: string | null
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          course_id: string
+          created_at: string
+          gateway: string
+          gateway_payment_id: string | null
+          id: string
+          payment_data: Json | null
+          payment_method: string | null
+          seller_id: string
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          course_id: string
+          created_at?: string
+          gateway: string
+          gateway_payment_id?: string | null
+          id?: string
+          payment_data?: Json | null
+          payment_method?: string | null
+          seller_id: string
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          course_id?: string
+          created_at?: string
+          gateway?: string
+          gateway_payment_id?: string | null
+          id?: string
+          payment_data?: Json | null
+          payment_method?: string | null
+          seller_id?: string
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

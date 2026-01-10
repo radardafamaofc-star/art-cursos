@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -10,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { CheckoutModal } from "@/components/checkout/CheckoutModal";
 import { 
   Play, 
   Clock, 
@@ -44,6 +46,7 @@ export default function CourseDetail() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
+  const [showCheckout, setShowCheckout] = useState(false);
 
   // Fetch course
   const { data: course, isLoading: courseLoading } = useQuery({
@@ -169,7 +172,19 @@ export default function CourseDetail() {
       navigate('/login');
       return;
     }
-    enrollMutation.mutate();
+    // If course is paid, show checkout modal
+    if (course?.price && course.price > 0) {
+      setShowCheckout(true);
+    } else {
+      // Free course - enroll directly
+      enrollMutation.mutate();
+    }
+  };
+
+  const handlePaymentSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['enrollment'] });
+    queryClient.invalidateQueries({ queryKey: ['my-enrollments'] });
+    toast.success('Pagamento aprovado! Você já pode acessar o curso.');
   };
 
   const handleStartCourse = () => {
@@ -467,6 +482,19 @@ export default function CourseDetail() {
       </main>
 
       <Footer />
+
+      {/* Checkout Modal */}
+      {course && (
+        <CheckoutModal
+          isOpen={showCheckout}
+          onClose={() => setShowCheckout(false)}
+          courseId={course.id}
+          courseTitle={course.title}
+          price={course.price || 0}
+          sellerId={course.created_by || ""}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   );
 }

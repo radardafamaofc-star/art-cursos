@@ -12,6 +12,7 @@ import {
   Award,
   Plus,
   UserCog,
+  CreditCard,
 } from 'lucide-react';
 
 interface SidebarLink {
@@ -31,12 +32,14 @@ export function DashboardSidebar() {
     { to: '/admin/courses', icon: BookOpen, label: 'Cursos' },
     { to: '/admin/users', icon: UserCog, label: 'Gerenciamento' },
     { to: '/admin/students', icon: Users, label: 'Alunos' },
+    { to: '/admin/payments', icon: CreditCard, label: 'Pagamentos' },
     { to: '/admin/settings', icon: Settings, label: 'Configurações' },
   ];
 
   const professorLinks: SidebarLink[] = [
     { to: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin/courses', icon: BookOpen, label: 'Meus Cursos' },
+    { to: '/admin/payments', icon: CreditCard, label: 'Pagamentos' },
     { to: '/courses', icon: BookMarked, label: 'Explorar' },
     { to: '/admin/settings', icon: Settings, label: 'Configurações' },
   ];
