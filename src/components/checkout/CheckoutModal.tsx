@@ -190,6 +190,7 @@ export function CheckoutModal({
           gateway: selectedGateway,
           paymentMethod: "pix",
           amount: price,
+          returnUrl: `${window.location.origin}/student?payment=success`,
           customerData: {
             name: customerData.fullName,
             email: customerData.email,
