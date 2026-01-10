@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Shield, GraduationCap, UserX, Pencil, Trash2, Search, Loader2, Calendar } from "lucide-react";
+import { Users, Shield, GraduationCap, UserX, Pencil, Trash2, Search, Loader2, Calendar, Plus, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -75,6 +75,22 @@ export default function UserManagement() {
   const [deleteUser, setDeleteUser] = useState<UserProfile | null>(null);
   const [subscriptionDays, setSubscriptionDays] = useState<number>(30);
   const [currentSubscription, setCurrentSubscription] = useState<CreatorSubscription | null>(null);
+  
+  // Create user modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ 
+    email: "", 
+    password: "", 
+    full_name: "", 
+    role: "student" as UserRole 
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Edit credentials state
+  const [userEmail, setUserEmail] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['all-users'],
@@ -178,12 +194,127 @@ export default function UserManagement() {
     },
   });
 
+  const createUserMutation = useMutation({
+    mutationFn: async (userData: { email: string; password: string; full_name: string; role: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'create_user',
+          ...userData,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-users'] });
+      toast.success('Usuário criado com sucesso!');
+      setShowCreateModal(false);
+      setCreateForm({ email: "", password: "", full_name: "", role: "student" });
+    },
+    onError: (error) => {
+      toast.error('Erro ao criar usuário: ' + error.message);
+    },
+  });
+
+  const updateEmailMutation = useMutation({
+    mutationFn: async ({ user_id, new_email }: { user_id: string; new_email: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'update_email',
+          user_id,
+          new_email,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('Email atualizado com sucesso!');
+      setNewEmail("");
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar email: ' + error.message);
+    },
+  });
+
+  const updatePasswordMutation = useMutation({
+    mutationFn: async ({ user_id, new_password }: { user_id: string; new_password: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'update_password',
+          user_id,
+          new_password,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('Senha atualizada com sucesso!');
+      setNewPassword("");
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar senha: ' + error.message);
+    },
+  });
+
+  const fetchUserEmail = async (userId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-user-management`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'get_user_email',
+          user_id: userId,
+        }),
+      });
+      const result = await response.json();
+      if (response.ok && result.email) {
+        setUserEmail(result.email);
+        setNewEmail(result.email);
+      }
+    } catch (error) {
+      console.error('Error fetching user email:', error);
+    }
+  };
+
   const handleEdit = async (userProfile: UserProfile) => {
     setEditingUser(userProfile);
     setEditForm({
       full_name: userProfile.full_name || "",
       role: userProfile.role as UserRole,
     });
+    setNewPassword("");
+    setNewEmail("");
+    setUserEmail("");
+    
+    // Fetch user email
+    fetchUserEmail(userProfile.user_id);
     
     // Fetch subscription if professor
     if (userProfile.role === 'professor' && subscriptions?.[userProfile.user_id]) {
@@ -324,14 +455,20 @@ export default function UserManagement() {
                     Edite, bloqueie ou exclua usuários da plataforma
                   </CardDescription>
                 </div>
-                <div className="relative w-full md:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar usuários..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
+                <div className="flex items-center gap-4">
+                  <Button onClick={() => setShowCreateModal(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Criar Usuário
+                  </Button>
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar usuários..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -457,6 +594,86 @@ export default function UserManagement() {
                   <SelectItem value="admin">Administrador</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Email and Password Section */}
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2 text-primary">
+                <Mail className="h-4 w-4" />
+                <Label className="text-sm font-medium">Credenciais de Acesso</Label>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="current_email" className="text-xs text-muted-foreground">Email atual</Label>
+                <p className="text-sm">{userEmail || 'Carregando...'}</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="new_email">Novo Email</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="new_email"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="novo@email.com"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => editingUser && updateEmailMutation.mutate({ 
+                      user_id: editingUser.user_id, 
+                      new_email: newEmail 
+                    })}
+                    disabled={updateEmailMutation.isPending || !newEmail || newEmail === userEmail}
+                  >
+                    {updateEmailMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Atualizar'
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="new_password">Nova Senha</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="new_password"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Nova senha (mín. 6 caracteres)"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => editingUser && updatePasswordMutation.mutate({ 
+                      user_id: editingUser.user_id, 
+                      new_password: newPassword 
+                    })}
+                    disabled={updatePasswordMutation.isPending || newPassword.length < 6}
+                  >
+                    {updatePasswordMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Atualizar'
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
             
             {/* Professor subscription expiration */}
@@ -585,6 +802,91 @@ export default function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criar Novo Usuário</DialogTitle>
+            <DialogDescription>
+              Adicione um novo usuário à plataforma
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="create_email">Email *</Label>
+              <Input
+                id="create_email"
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="usuario@email.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create_password">Senha *</Label>
+              <div className="relative">
+                <Input
+                  id="create_password"
+                  type={showPassword ? "text" : "password"}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create_full_name">Nome Completo</Label>
+              <Input
+                id="create_full_name"
+                value={createForm.full_name}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, full_name: e.target.value }))}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create_role">Cargo</Label>
+              <Select
+                value={createForm.role}
+                onValueChange={(value: UserRole) => setCreateForm(prev => ({ ...prev, role: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Aluno</SelectItem>
+                  <SelectItem value="professor">Professor</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => createUserMutation.mutate(createForm)} 
+              disabled={createUserMutation.isPending || !createForm.email || createForm.password.length < 6}
+            >
+              {createUserMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Criando...</>
+              ) : (
+                'Criar Usuário'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
