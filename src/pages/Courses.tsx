@@ -135,6 +135,7 @@ export default function Courses() {
                       students={enrollmentCounts[course.id] || 0}
                       modules={course.modules?.length || 0}
                       category={course.category}
+                      price={course.price || 0}
                     />
                   </div>
                 ))}

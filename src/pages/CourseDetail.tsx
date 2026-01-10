@@ -259,6 +259,20 @@ export default function CourseDetail() {
                     <span>{modules.length} módulos</span>
                   </div>
                 </div>
+
+                {/* Price Display */}
+                <div className="mt-6">
+                  {course.price && course.price > 0 ? (
+                    <span className="text-3xl font-bold">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(course.price)}
+                    </span>
+                  ) : (
+                    <span className="text-3xl font-bold text-green-400">Gratuito</span>
+                  )}
+                </div>
               </div>
 
               {/* CTA Card */}
@@ -314,14 +328,35 @@ export default function CourseDetail() {
                       </>
                     ) : (
                       <>
-                        <Button 
-                          size="lg" 
-                          className="w-full" 
-                          onClick={handleEnroll}
-                          disabled={enrollMutation.isPending}
-                        >
-                          {enrollMutation.isPending ? 'Matriculando...' : 'Matricular-se Grátis'}
-                        </Button>
+                        {course.price && course.price > 0 ? (
+                          <div className="space-y-4">
+                            <div className="text-center">
+                              <span className="text-3xl font-bold">
+                                {new Intl.NumberFormat("pt-BR", {
+                                  style: "currency",
+                                  currency: "BRL",
+                                }).format(course.price)}
+                              </span>
+                            </div>
+                            <Button 
+                              size="lg" 
+                              className="w-full" 
+                              onClick={handleEnroll}
+                              disabled={enrollMutation.isPending}
+                            >
+                              {enrollMutation.isPending ? 'Processando...' : 'Comprar Curso'}
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button 
+                            size="lg" 
+                            className="w-full" 
+                            onClick={handleEnroll}
+                            disabled={enrollMutation.isPending}
+                          >
+                            {enrollMutation.isPending ? 'Matriculando...' : 'Matricular-se Grátis'}
+                          </Button>
+                        )}
                       </>
                     )}
                     
