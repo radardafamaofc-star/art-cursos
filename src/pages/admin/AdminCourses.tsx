@@ -6,6 +6,7 @@ import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   Plus,
   MoreVertical,
@@ -33,10 +34,15 @@ import { toast } from "sonner";
 
 export default function AdminCourses() {
   const queryClient = useQueryClient();
+  const { user, profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
 
   const { data: courses, isLoading } = useQuery({
-    queryKey: ['admin-courses'],
+    queryKey: ['admin-courses', user?.id],
     queryFn: async () => {
+      // RLS policies handle filtering:
+      // - Admins see all courses
+      // - Professors see only their own courses
       const { data, error } = await supabase
         .from('courses')
         .select('*')
@@ -44,6 +50,7 @@ export default function AdminCourses() {
       if (error) throw error;
       return data;
     },
+    enabled: !!user,
   });
 
   const { data: enrollmentCounts } = useQuery({
@@ -91,8 +98,8 @@ export default function AdminCourses() {
 
       <div className="lg:pl-64">
         <DashboardHeader 
-          title="Cursos"
-          subtitle="Gerencie todos os cursos da plataforma"
+          title={isAdmin ? "Todos os Cursos" : "Meus Cursos"}
+          subtitle={isAdmin ? "Gerencie todos os cursos da plataforma" : "Gerencie seus cursos publicados"}
           actions={
             <Button asChild>
               <Link to="/admin/courses/new">
@@ -106,9 +113,9 @@ export default function AdminCourses() {
         <main className="p-6">
           <Card>
             <CardHeader>
-              <CardTitle>Todos os Cursos</CardTitle>
+              <CardTitle>{isAdmin ? "Todos os Cursos" : "Meus Cursos"}</CardTitle>
               <CardDescription>
-                {courses?.length || 0} curso{courses?.length !== 1 ? 's' : ''} cadastrado{courses?.length !== 1 ? 's' : ''}
+                {courses?.length || 0} curso{courses?.length !== 1 ? 's' : ''} {isAdmin ? 'cadastrado' : 'criado'}{courses?.length !== 1 ? 's' : ''}
               </CardDescription>
             </CardHeader>
             <CardContent>
