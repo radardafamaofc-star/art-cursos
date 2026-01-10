@@ -29,7 +29,8 @@ export default function Register() {
 
     try {
       await signUp(email, password, name);
-      navigate('/student');
+      // Redirect to login page after successful registration
+      navigate('/login');
     } catch (error: any) {
       console.error('Register error:', error);
       toast.error(error.message || 'Erro ao criar conta');
