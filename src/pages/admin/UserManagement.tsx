@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Shield, GraduationCap, UserX, Pencil, Trash2, Search, Loader2 } from "lucide-react";
+import { Users, Shield, GraduationCap, UserX, Pencil, Trash2, Search, Loader2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -44,6 +44,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { format, addDays, differenceInDays } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type UserRole = 'admin' | 'professor' | 'student';
 
@@ -57,6 +59,13 @@ interface UserProfile {
   avatar_url: string | null;
 }
 
+interface CreatorSubscription {
+  id: string;
+  user_id: string;
+  expires_at: string | null;
+  status: string;
+}
+
 export default function UserManagement() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -64,6 +73,8 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editForm, setEditForm] = useState({ full_name: "", role: "" as UserRole });
   const [deleteUser, setDeleteUser] = useState<UserProfile | null>(null);
+  const [subscriptionDays, setSubscriptionDays] = useState<number>(30);
+  const [currentSubscription, setCurrentSubscription] = useState<CreatorSubscription | null>(null);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['all-users'],
@@ -90,6 +101,26 @@ export default function UserManagement() {
         counts[e.user_id] = (counts[e.user_id] || 0) + 1;
       });
       return counts;
+    },
+  });
+
+  const { data: subscriptions } = useQuery({
+    queryKey: ['creator-subscriptions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('creator_subscriptions')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      // Get latest subscription per user
+      const latestByUser: Record<string, CreatorSubscription> = {};
+      data.forEach(sub => {
+        if (!latestByUser[sub.user_id] || new Date(sub.created_at) > new Date(latestByUser[sub.user_id].expires_at || 0)) {
+          latestByUser[sub.user_id] = sub;
+        }
+      });
+      return latestByUser;
     },
   });
 
@@ -129,22 +160,75 @@ export default function UserManagement() {
     },
   });
 
-  const handleEdit = (userProfile: UserProfile) => {
+  const updateSubscriptionMutation = useMutation({
+    mutationFn: async ({ subscriptionId, newExpiresAt }: { subscriptionId: string; newExpiresAt: Date }) => {
+      const { error } = await supabase
+        .from('creator_subscriptions')
+        .update({ expires_at: newExpiresAt.toISOString() })
+        .eq('id', subscriptionId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['creator-subscriptions'] });
+      toast.success('Data de expiração atualizada com sucesso!');
+      setCurrentSubscription(null);
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar assinatura: ' + error.message);
+    },
+  });
+
+  const handleEdit = async (userProfile: UserProfile) => {
     setEditingUser(userProfile);
     setEditForm({
       full_name: userProfile.full_name || "",
       role: userProfile.role as UserRole,
     });
+    
+    // Fetch subscription if professor
+    if (userProfile.role === 'professor' && subscriptions?.[userProfile.user_id]) {
+      const sub = subscriptions[userProfile.user_id];
+      setCurrentSubscription(sub);
+      if (sub.expires_at) {
+        const daysRemaining = differenceInDays(new Date(sub.expires_at), new Date());
+        setSubscriptionDays(Math.max(0, daysRemaining));
+      } else {
+        setSubscriptionDays(30);
+      }
+    } else {
+      setCurrentSubscription(null);
+      setSubscriptionDays(30);
+    }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingUser) return;
-    updateUserMutation.mutate({
+    
+    // Update user profile
+    await updateUserMutation.mutateAsync({
       userId: editingUser.user_id,
       updates: {
         full_name: editForm.full_name,
         role: editForm.role,
       },
+    });
+
+    // Update subscription expiration if professor with existing subscription
+    if (editForm.role === 'professor' && currentSubscription) {
+      const newExpiresAt = addDays(new Date(), subscriptionDays);
+      await updateSubscriptionMutation.mutateAsync({
+        subscriptionId: currentSubscription.id,
+        newExpiresAt,
+      });
+    }
+  };
+
+  const handleUpdateSubscriptionOnly = () => {
+    if (!currentSubscription) return;
+    const newExpiresAt = addDays(new Date(), subscriptionDays);
+    updateSubscriptionMutation.mutate({
+      subscriptionId: currentSubscription.id,
+      newExpiresAt,
     });
   };
 
@@ -374,13 +458,99 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Professor subscription expiration */}
+            {(editForm.role === 'professor' || editingUser?.role === 'professor') && (
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
+                <div className="flex items-center gap-2 text-blue-600">
+                  <Calendar className="h-4 w-4" />
+                  <Label className="text-sm font-medium">Assinatura de Professor</Label>
+                </div>
+                
+                {currentSubscription ? (
+                  <>
+                    <div className="text-sm text-muted-foreground">
+                      {currentSubscription.expires_at ? (
+                        <>
+                          <p>
+                            Expira em: <strong>{format(new Date(currentSubscription.expires_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</strong>
+                          </p>
+                          <p className="mt-1">
+                            {differenceInDays(new Date(currentSubscription.expires_at), new Date()) > 0 
+                              ? `(${differenceInDays(new Date(currentSubscription.expires_at), new Date())} dias restantes)`
+                              : '(Expirado)'}
+                          </p>
+                        </>
+                      ) : (
+                        <p>Sem data de expiração definida</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="subscription_days">Definir nova expiração (dias a partir de hoje)</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="subscription_days"
+                          type="number"
+                          min="0"
+                          max="365"
+                          value={subscriptionDays}
+                          onChange={(e) => setSubscriptionDays(parseInt(e.target.value) || 0)}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-muted-foreground self-center">
+                          = {format(addDays(new Date(), subscriptionDays), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSubscriptionDays(7)}
+                        >
+                          7 dias
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSubscriptionDays(30)}
+                        >
+                          30 dias
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSubscriptionDays(90)}
+                        >
+                          90 dias
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setSubscriptionDays(365)}
+                        >
+                          1 ano
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Este usuário não possui assinatura de professor ativa.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingUser(null)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveEdit} disabled={updateUserMutation.isPending}>
-              {updateUserMutation.isPending ? (
+            <Button 
+              onClick={handleSaveEdit} 
+              disabled={updateUserMutation.isPending || updateSubscriptionMutation.isPending}
+            >
+              {(updateUserMutation.isPending || updateSubscriptionMutation.isPending) ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</>
               ) : (
                 'Salvar'
