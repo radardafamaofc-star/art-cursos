@@ -31,7 +31,6 @@ const GATEWAYS = [
     logo: "🥑",
     fields: [
       { key: "secret_key", label: "API Key", placeholder: "Sua chave de API", secret: true },
-      { key: "webhook_secret", label: "Webhook Secret", placeholder: "Secret do webhook", secret: true },
     ],
   },
   {
@@ -41,7 +40,6 @@ const GATEWAYS = [
     logo: "🏦",
     fields: [
       { key: "secret_key", label: "API Key", placeholder: "$aact_...", secret: true },
-      { key: "webhook_secret", label: "Webhook Token", placeholder: "Token do webhook", secret: true },
     ],
     additionalFields: [
       { key: "environment", label: "Ambiente", type: "select", options: ["sandbox", "production"] },
@@ -53,7 +51,6 @@ const GATEWAYS = [
     description: "O gateway mais popular do Brasil",
     logo: "🛒",
     fields: [
-      { key: "public_key", label: "Public Key", placeholder: "APP_USR-..." },
       { key: "secret_key", label: "Access Token", placeholder: "APP_USR-...", secret: true },
     ],
   },
@@ -64,7 +61,6 @@ const GATEWAYS = [
     logo: "⚡",
     fields: [
       { key: "secret_key", label: "API Token", placeholder: "Seu token de API", secret: true },
-      { key: "webhook_secret", label: "Webhook Secret", placeholder: "Secret do webhook", secret: true },
     ],
   },
 ];
