@@ -78,12 +78,15 @@ export function CheckoutModal({
       // Fetch gateways
       const fetchGateways = async () => {
         try {
+          // Query only public fields - RLS allows viewing active gateways
           const { data, error } = await supabase
             .from("payment_configurations")
             .select("id, gateway, is_active")
             .eq("user_id", sellerId)
             .eq("is_active", true);
 
+          console.log("Fetching gateways for seller:", sellerId, "Result:", data, "Error:", error);
+          
           if (error) throw error;
           setAvailableGateways(data || []);
           if (data && data.length > 0) {
