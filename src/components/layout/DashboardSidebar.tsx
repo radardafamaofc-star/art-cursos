@@ -11,6 +11,7 @@ import {
   BookMarked,
   Award,
   Plus,
+  UserCog,
 } from 'lucide-react';
 
 interface SidebarLink {
@@ -23,10 +24,20 @@ export function DashboardSidebar() {
   const { profile, signOut, isAdmin } = useAuth();
   const location = useLocation();
 
+  const isProfessor = profile?.role === 'professor';
+
   const adminLinks: SidebarLink[] = [
     { to: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin/courses', icon: BookOpen, label: 'Cursos' },
+    { to: '/admin/users', icon: UserCog, label: 'Gerenciamento' },
     { to: '/admin/students', icon: Users, label: 'Alunos' },
+    { to: '/admin/settings', icon: Settings, label: 'Configurações' },
+  ];
+
+  const professorLinks: SidebarLink[] = [
+    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/admin/courses', icon: BookOpen, label: 'Meus Cursos' },
+    { to: '/courses', icon: BookMarked, label: 'Explorar' },
     { to: '/admin/settings', icon: Settings, label: 'Configurações' },
   ];
 
@@ -38,7 +49,7 @@ export function DashboardSidebar() {
     { to: '/student/settings', icon: Settings, label: 'Configurações' },
   ];
 
-  const links = isAdmin ? adminLinks : studentLinks;
+  const links = isAdmin ? adminLinks : isProfessor ? professorLinks : studentLinks;
 
   const handleSignOut = async () => {
     await signOut();
@@ -75,7 +86,7 @@ export function DashboardSidebar() {
           );
         })}
 
-        {isAdmin && (
+        {(isAdmin || isProfessor) && (
           <Link
             to="/admin/courses/new"
             className="flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mt-4 border-t pt-6"
@@ -93,7 +104,9 @@ export function DashboardSidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{profile?.full_name || 'Usuário'}</p>
-            <p className="text-xs text-muted-foreground">{isAdmin ? 'Administrador' : 'Aluno'}</p>
+            <p className="text-xs text-muted-foreground">
+              {isAdmin ? 'Administrador' : isProfessor ? 'Professor' : 'Aluno'}
+            </p>
           </div>
         </div>
         <Button

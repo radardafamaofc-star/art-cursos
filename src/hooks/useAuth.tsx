@@ -8,7 +8,8 @@ interface Profile {
   user_id: string;
   full_name: string | null;
   avatar_url: string | null;
-  role: 'admin' | 'student';
+  role: 'admin' | 'professor' | 'student';
+  blocked?: boolean;
   created_at: string;
   updated_at: string;
 }
