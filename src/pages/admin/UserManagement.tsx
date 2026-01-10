@@ -645,7 +645,7 @@ export default function UserManagement() {
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Nova senha (mín. 6 caracteres)"
+                      placeholder="Nova senha (mín. 2 caracteres)"
                     />
                     <Button
                       type="button"
@@ -664,7 +664,7 @@ export default function UserManagement() {
                       user_id: editingUser.user_id, 
                       new_password: newPassword 
                     })}
-                    disabled={updatePasswordMutation.isPending || newPassword.length < 6}
+                    disabled={updatePasswordMutation.isPending || newPassword.length < 2}
                   >
                     {updatePasswordMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -809,19 +809,22 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle>Criar Novo Usuário</DialogTitle>
             <DialogDescription>
-              Adicione um novo usuário à plataforma
+              Adicione um novo usuário à plataforma. Você pode usar qualquer login (email ou texto livre).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="create_email">Email *</Label>
+              <Label htmlFor="create_email">Login *</Label>
               <Input
                 id="create_email"
-                type="email"
+                type="text"
                 value={createForm.email}
                 onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="usuario@email.com"
+                placeholder="Email ou nome de usuário (mín. 2 caracteres)"
               />
+              <p className="text-xs text-muted-foreground">
+                Pode ser um email ou qualquer texto com pelo menos 2 caracteres
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="create_password">Senha *</Label>
@@ -831,7 +834,7 @@ export default function UserManagement() {
                   type={showPassword ? "text" : "password"}
                   value={createForm.password}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 2 caracteres"
                 />
                 <Button
                   type="button"
@@ -876,7 +879,7 @@ export default function UserManagement() {
             </Button>
             <Button 
               onClick={() => createUserMutation.mutate(createForm)} 
-              disabled={createUserMutation.isPending || !createForm.email || createForm.password.length < 6}
+              disabled={createUserMutation.isPending || createForm.email.length < 2 || createForm.password.length < 2}
             >
               {createUserMutation.isPending ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Criando...</>
