@@ -28,6 +28,7 @@ interface CustomerData {
   fullName: string;
   email: string;
   phone: string;
+  cpf: string;
 }
 
 interface PixData {
@@ -63,6 +64,7 @@ export function CheckoutModal({
     fullName: "",
     email: "",
     phone: "",
+    cpf: "",
   });
   const [pixData, setPixData] = useState<PixData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -102,7 +104,7 @@ export function CheckoutModal({
       fetchGateways();
     } else {
       // Reset form when closing
-      setCustomerData({ fullName: "", email: "", phone: "" });
+      setCustomerData({ fullName: "", email: "", phone: "", cpf: "" });
       setSelectedGateway("");
     }
   }, [isOpen, sellerId]);
@@ -122,8 +124,20 @@ export function CheckoutModal({
     return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
   };
 
+  const formatCPF = (value: string) => {
+    const numbers = value.replace(/\D/g, "");
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
+    if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
+    return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`;
+  };
+
   const handlePhoneChange = (value: string) => {
     setCustomerData(prev => ({ ...prev, phone: formatPhone(value) }));
+  };
+
+  const handleCPFChange = (value: string) => {
+    setCustomerData(prev => ({ ...prev, cpf: formatCPF(value) }));
   };
 
   const validateForm = () => {
@@ -138,6 +152,11 @@ export function CheckoutModal({
     const phoneNumbers = customerData.phone.replace(/\D/g, "");
     if (phoneNumbers.length < 10) {
       toast.error("Por favor, informe um telefone válido");
+      return false;
+    }
+    const cpfNumbers = customerData.cpf.replace(/\D/g, "");
+    if (cpfNumbers.length !== 11) {
+      toast.error("Por favor, informe um CPF válido");
       return false;
     }
     return true;
@@ -175,6 +194,7 @@ export function CheckoutModal({
             name: customerData.fullName,
             email: customerData.email,
             phone: customerData.phone.replace(/\D/g, ""),
+            cpf: customerData.cpf.replace(/\D/g, ""),
           },
         },
       });
@@ -291,6 +311,16 @@ export function CheckoutModal({
                       placeholder="(00) 00000-0000"
                       value={customerData.phone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cpf">CPF *</Label>
+                    <Input
+                      id="cpf"
+                      placeholder="000.000.000-00"
+                      value={customerData.cpf}
+                      onChange={(e) => handleCPFChange(e.target.value)}
                     />
                   </div>
                 </div>

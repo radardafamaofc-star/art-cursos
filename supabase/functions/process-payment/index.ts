@@ -40,6 +40,7 @@ serve(async (req) => {
       name: customerData?.name || userData.user.user_metadata?.full_name || userData.user.email,
       email: customerData?.email || userData.user.email,
       phone: customerData?.phone || "",
+      cpf: customerData?.cpf || "",
     };
 
     // Get course info to find seller
@@ -140,6 +141,7 @@ async function processAbacatePayPayment(config: any, course: any, customer: any,
         email: customer.email,
         name: customer.name,
         cellphone: customer.phone,
+        taxId: customer.cpf.replace(/\D/g, ""),
       },
       returnUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
       completionUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
