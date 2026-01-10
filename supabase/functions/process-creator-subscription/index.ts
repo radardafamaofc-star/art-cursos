@@ -32,11 +32,14 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    const { gateway, amount, customerData } = await req.json();
+    const { gateway, amount, customerData, returnUrl } = await req.json();
 
     if (!gateway || !amount) {
       throw new Error("Dados incompletos");
     }
+
+    // Use provided returnUrl or construct from SUPABASE_URL
+    const baseReturnUrl = returnUrl || `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/student?subscription=success`;
 
     const customer = {
       name: customerData?.name || userData.user.user_metadata?.full_name || userData.user.email,
@@ -63,7 +66,7 @@ serve(async (req) => {
     // Process payment based on gateway
     switch (gateway) {
       case "abacatepay":
-        paymentResult = await processAbacatePayPayment(paymentConfig, customer, amount, userData.user.id);
+        paymentResult = await processAbacatePayPayment(paymentConfig, customer, amount, userData.user.id, baseReturnUrl);
         break;
       case "asaas":
         paymentResult = await processAsaasPayment(paymentConfig, customer, amount, userData.user.id);
@@ -78,17 +81,30 @@ serve(async (req) => {
         throw new Error("Gateway não suportado");
     }
 
-    // Create subscription record
+    // Create subscription record and update user role to professor
     if (paymentResult.success || paymentResult.redirectUrl || paymentResult.pixCode) {
+      // Create/update subscription
       await supabase.from("creator_subscriptions").upsert({
         user_id: userData.user.id,
         gateway,
         payment_id: paymentResult.paymentId || null,
         amount: SUBSCRIPTION_AMOUNT,
-        status: "pending",
+        status: "active",
+        activated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
       }, {
         onConflict: 'user_id'
       });
+
+      // Update user profile to professor role
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ role: "professor" })
+        .eq("user_id", userData.user.id);
+
+      if (profileError) {
+        console.error("Error updating profile role:", profileError);
+      }
     }
 
     return new Response(JSON.stringify(paymentResult), {
@@ -108,9 +124,7 @@ serve(async (req) => {
 });
 
 // AbacatePay Payment
-async function processAbacatePayPayment(config: any, customer: any, amount: number, userId: string) {
-  const baseUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app");
-  
+async function processAbacatePayPayment(config: any, customer: any, amount: number, userId: string, returnUrl: string) {
   const response = await fetch("https://api.abacatepay.com/v1/billing/create", {
     method: "POST",
     headers: {
@@ -134,8 +148,8 @@ async function processAbacatePayPayment(config: any, customer: any, amount: numb
         cellphone: customer.phone,
         taxId: customer.cpf.replace(/\D/g, ""),
       },
-      returnUrl: `${baseUrl}/student?subscription=success`,
-      completionUrl: `${baseUrl}/student?subscription=success`,
+      returnUrl: returnUrl,
+      completionUrl: returnUrl,
     }),
   });
 

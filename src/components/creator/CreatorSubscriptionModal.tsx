@@ -173,10 +173,14 @@ export function CreatorSubscriptionModal({
     setLoading(true);
 
     try {
+      // Pass the current origin for proper redirect after payment
+      const returnUrl = `${window.location.origin}/student?subscription=success`;
+      
       const { data, error } = await supabase.functions.invoke("process-creator-subscription", {
         body: {
           gateway: selectedGateway,
           amount: SUBSCRIPTION_PRICE,
+          returnUrl,
           customerData: {
             name: customerData.fullName,
             email: customerData.email,
@@ -189,15 +193,16 @@ export function CreatorSubscriptionModal({
       if (error) throw error;
 
       if (data.success || data.pixCode || data.redirectUrl) {
-        if (data.pixCode) {
+        if (data.redirectUrl) {
+          // For gateways that redirect (like AbacatePay checkout page)
+          window.location.href = data.redirectUrl;
+        } else if (data.pixCode) {
           setPixData({
             pixCode: data.pixCode,
             pixImage: data.pixImage,
             paymentId: data.paymentId,
           });
           setStep("pix");
-        } else if (data.redirectUrl) {
-          window.location.href = data.redirectUrl;
         }
       } else {
         throw new Error(data.message || "Erro ao gerar PIX");
