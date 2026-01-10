@@ -56,6 +56,42 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_subscriptions: {
+        Row: {
+          activated_at: string | null
+          amount: number
+          created_at: string
+          expires_at: string | null
+          gateway: string
+          id: string
+          payment_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          activated_at?: string | null
+          amount?: number
+          created_at?: string
+          expires_at?: string | null
+          gateway: string
+          id?: string
+          payment_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          activated_at?: string | null
+          amount?: number
+          created_at?: string
+          expires_at?: string | null
+          gateway?: string
+          id?: string
+          payment_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       enrollments: {
         Row: {
           course_id: string
