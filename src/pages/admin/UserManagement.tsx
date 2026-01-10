@@ -494,8 +494,16 @@ export default function UserManagement() {
                       <TableRow key={userProfile.id} className={userProfile.blocked ? "opacity-60" : ""}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-                              {userProfile.full_name?.charAt(0) || 'U'}
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium overflow-hidden">
+                              {userProfile.avatar_url ? (
+                                <img 
+                                  src={userProfile.avatar_url} 
+                                  alt={userProfile.full_name || 'Avatar'} 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                userProfile.full_name?.charAt(0) || 'U'
+                              )}
                             </div>
                             <div>
                               <p className="font-medium">{userProfile.full_name || 'Sem nome'}</p>
