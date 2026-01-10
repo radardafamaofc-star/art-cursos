@@ -14,6 +14,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminCourses from "./pages/admin/AdminCourses";
 import AdminStudents from "./pages/admin/AdminStudents";
 import UserManagement from "./pages/admin/UserManagement";
+import PaymentSettings from "./pages/admin/PaymentSettings";
 import CourseForm from "./pages/admin/CourseForm";
 import CourseModules from "./pages/admin/CourseModules";
 import StudentDashboard from "./pages/student/StudentDashboard";
@@ -70,6 +71,11 @@ const App = () => (
             <Route path="/admin/users" element={
               <ProtectedRoute requiredRole="admin-only">
                 <UserManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/payments" element={
+              <ProtectedRoute requiredRole="admin">
+                <PaymentSettings />
               </ProtectedRoute>
             } />
 
