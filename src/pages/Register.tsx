@@ -91,7 +91,7 @@ export default function Register() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-primary">
                 <GraduationCap className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span>EduPlatform</span>
+              <span>Art Cursos</span>
             </Link>
           </div>
 
