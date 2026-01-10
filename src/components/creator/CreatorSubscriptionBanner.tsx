@@ -51,9 +51,12 @@ export function CreatorSubscriptionBanner() {
   const daysRemaining = getDaysRemaining();
   const showRenewButton = daysRemaining <= 7 && daysRemaining > 0;
   const isExpired = daysRemaining === 0 && subscription;
+  
+  // Check if user has subscription (is a creator) - either professor role OR has active subscription
+  const isCreator = profile.role === 'professor' || subscription;
 
-  // User is a professor with active subscription - show countdown
-  if (profile.role === 'professor' && subscription && !isExpired) {
+  // Creator with active subscription - show countdown
+  if (isCreator && subscription && !isExpired) {
     return (
       <>
         <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
@@ -95,37 +98,8 @@ export function CreatorSubscriptionBanner() {
     );
   }
 
-  // User is NOT a professor - show "Become Creator" button
-  if (profile.role !== 'professor') {
-    return (
-      <>
-        <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
-          <Button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-primary px-6"
-            size="sm"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Torne-se um Criador de Conteúdo
-          </Button>
-        </div>
-
-        <CreatorSubscriptionModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          adminId={ADMIN_USER_ID}
-          isRenewal={false}
-          onSuccess={() => {
-            setIsModalOpen(false);
-            window.location.href = '/student';
-          }}
-        />
-      </>
-    );
-  }
-
-  // Professor with expired subscription
-  if (isExpired) {
+  // Creator with expired subscription
+  if (isCreator && isExpired) {
     return (
       <>
         <div className="w-full flex justify-center py-3 bg-destructive/10 border-b border-destructive/20">
@@ -158,5 +132,30 @@ export function CreatorSubscriptionBanner() {
     );
   }
 
-  return null;
+  // User is NOT a creator - show "Become Creator" button
+  return (
+    <>
+      <div className="w-full flex justify-center py-3 bg-primary/5 border-b border-primary/10">
+        <Button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-gradient-primary hover:opacity-90 text-primary-foreground shadow-primary px-6"
+          size="sm"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Torne-se um Criador de Conteúdo
+        </Button>
+      </div>
+
+      <CreatorSubscriptionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        adminId={ADMIN_USER_ID}
+        isRenewal={false}
+        onSuccess={() => {
+          setIsModalOpen(false);
+          window.location.href = '/student';
+        }}
+      />
+    </>
+  );
 }
