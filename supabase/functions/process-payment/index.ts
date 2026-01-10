@@ -29,11 +29,18 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    const { courseId, gateway, paymentMethod, amount } = await req.json();
+    const { courseId, gateway, paymentMethod, amount, customerData } = await req.json();
 
     if (!courseId || !gateway || !amount) {
       throw new Error("Dados incompletos");
     }
+
+    // Use customer data from form or fall back to user data
+    const customer = {
+      name: customerData?.name || userData.user.user_metadata?.full_name || userData.user.email,
+      email: customerData?.email || userData.user.email,
+      phone: customerData?.phone || "",
+    };
 
     // Get course info to find seller
     const { data: course, error: courseError } = await supabase
@@ -64,16 +71,16 @@ serve(async (req) => {
     // Process payment based on gateway
     switch (gateway) {
       case "abacatepay":
-        paymentResult = await processAbacatePayPayment(paymentConfig, course, userData.user, amount);
+        paymentResult = await processAbacatePayPayment(paymentConfig, course, customer, amount);
         break;
       case "asaas":
-        paymentResult = await processAsaasPayment(paymentConfig, course, userData.user, amount, paymentMethod);
+        paymentResult = await processAsaasPayment(paymentConfig, course, customer, amount, paymentMethod);
         break;
       case "mercadopago":
-        paymentResult = await processMercadoPagoPayment(paymentConfig, course, userData.user, amount, paymentMethod);
+        paymentResult = await processMercadoPagoPayment(paymentConfig, course, customer, amount, paymentMethod);
         break;
       case "pushinpay":
-        paymentResult = await processPushinPayPayment(paymentConfig, course, userData.user, amount);
+        paymentResult = await processPushinPayPayment(paymentConfig, course, customer, amount);
         break;
       default:
         throw new Error("Gateway não suportado");
@@ -111,7 +118,7 @@ serve(async (req) => {
 });
 
 // AbacatePay Payment (PIX)
-async function processAbacatePayPayment(config: any, course: any, user: any, amount: number) {
+async function processAbacatePayPayment(config: any, course: any, customer: any, amount: number) {
   const response = await fetch("https://api.abacatepay.com/v1/billing/create", {
     method: "POST",
     headers: {
@@ -130,8 +137,9 @@ async function processAbacatePayPayment(config: any, course: any, user: any, amo
         },
       ],
       customer: {
-        email: user.email,
-        name: user.user_metadata?.full_name || user.email,
+        email: customer.email,
+        name: customer.name,
+        cellphone: customer.phone,
       },
       returnUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
       completionUrl: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
@@ -139,22 +147,28 @@ async function processAbacatePayPayment(config: any, course: any, user: any, amo
   });
 
   const result = await response.json();
+  console.log("AbacatePay response:", JSON.stringify(result));
 
   if (result.error) {
     throw new Error(result.error || "Erro ao criar cobrança no AbacatePay");
   }
 
+  // AbacatePay returns the PIX data in the response
+  const billingData = result.data || result;
+  
   return {
     success: true,
-    redirectUrl: result.data?.url || result.url,
-    paymentId: result.data?.id || result.id,
+    redirectUrl: billingData.url,
+    pixCode: billingData.pixQrCode || billingData.pix?.qrCode,
+    pixImage: billingData.pixQrCodeBase64 || billingData.pix?.qrCodeBase64,
+    paymentId: billingData.id,
     status: "pending",
     data: result,
   };
 }
 
 // Asaas Payment
-async function processAsaasPayment(config: any, course: any, user: any, amount: number, method: string) {
+async function processAsaasPayment(config: any, course: any, customer: any, amount: number, method: string) {
   const isProduction = config.additional_config?.environment === "production";
   const baseUrl = isProduction ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/api/v3";
 
@@ -166,25 +180,26 @@ async function processAsaasPayment(config: any, course: any, user: any, amount: 
       access_token: config.secret_key,
     },
     body: JSON.stringify({
-      name: user.user_metadata?.full_name || user.email,
-      email: user.email,
+      name: customer.name,
+      email: customer.email,
+      mobilePhone: customer.phone,
     }),
   });
 
-  const customer = await customerResponse.json();
-  const customerId = customer.id || customer.errors ? null : customer.id;
+  const customerResult = await customerResponse.json();
+  let customerId = customerResult.id;
 
-  if (!customerId && customer.errors) {
+  if (!customerId && customerResult.errors) {
     // Customer might already exist, try to find
-    const searchResponse = await fetch(`${baseUrl}/customers?email=${user.email}`, {
+    const searchResponse = await fetch(`${baseUrl}/customers?email=${customer.email}`, {
       headers: { access_token: config.secret_key },
     });
     const searchResult = await searchResponse.json();
     if (searchResult.data && searchResult.data.length > 0) {
-      const existingCustomerId = searchResult.data[0].id;
-      return await createAsaasPayment(baseUrl, config.secret_key, existingCustomerId, course, amount, method);
+      customerId = searchResult.data[0].id;
+    } else {
+      throw new Error("Erro ao criar cliente");
     }
-    throw new Error("Erro ao criar cliente");
   }
 
   return await createAsaasPayment(baseUrl, config.secret_key, customerId, course, amount, method);
@@ -240,52 +255,50 @@ async function createAsaasPayment(baseUrl: string, apiKey: string, customerId: s
   };
 }
 
-// Mercado Pago Payment
-async function processMercadoPagoPayment(config: any, course: any, user: any, amount: number, method: string) {
-  const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
+// Mercado Pago Payment - Generate PIX directly
+async function processMercadoPagoPayment(config: any, course: any, customer: any, amount: number, method: string) {
+  // Create PIX payment directly
+  const response = await fetch("https://api.mercadopago.com/v1/payments", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.secret_key}`,
+      "X-Idempotency-Key": `${course.id}-${Date.now()}`,
     },
     body: JSON.stringify({
-      items: [
-        {
-          title: course.title,
-          quantity: 1,
-          unit_price: amount,
-          currency_id: "BRL",
-        },
-      ],
+      transaction_amount: amount,
+      payment_method_id: "pix",
       payer: {
-        email: user.email,
+        email: customer.email,
+        first_name: customer.name.split(" ")[0],
+        last_name: customer.name.split(" ").slice(1).join(" ") || customer.name,
       },
+      description: `Curso: ${course.title}`,
       external_reference: course.id,
-      back_urls: {
-        success: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=success`,
-        failure: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=failed`,
-        pending: `${Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app")}/course/${course.id}?payment=pending`,
-      },
-      auto_return: "approved",
     }),
   });
 
-  const preference = await response.json();
+  const payment = await response.json();
+  console.log("MercadoPago response:", JSON.stringify(payment));
 
-  if (preference.error) {
-    throw new Error(preference.message || "Erro ao criar preferência");
+  if (payment.error) {
+    throw new Error(payment.message || "Erro ao criar pagamento PIX");
   }
+
+  const pixData = payment.point_of_interaction?.transaction_data;
 
   return {
     success: true,
-    redirectUrl: preference.init_point,
-    paymentId: preference.id,
+    pixCode: pixData?.qr_code,
+    pixImage: pixData?.qr_code_base64,
+    paymentId: payment.id?.toString(),
     status: "pending",
+    data: payment,
   };
 }
 
 // PushinPay Payment (PIX)
-async function processPushinPayPayment(config: any, course: any, user: any, amount: number) {
+async function processPushinPayPayment(config: any, course: any, customer: any, amount: number) {
   const response = await fetch("https://api.pushinpay.com.br/api/pix/cashIn", {
     method: "POST",
     headers: {
@@ -296,10 +309,16 @@ async function processPushinPayPayment(config: any, course: any, user: any, amou
       value: Math.round(amount * 100), // Amount in cents
       webhook_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/payment-webhook`,
       external_reference: course.id,
+      payer: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+      },
     }),
   });
 
   const result = await response.json();
+  console.log("PushinPay response:", JSON.stringify(result));
 
   if (!result.qr_code) {
     throw new Error(result.message || "Erro ao gerar PIX");
