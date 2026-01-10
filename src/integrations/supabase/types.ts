@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      course_certificates: {
+        Row: {
+          certificate_url: string
+          course_id: string
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          certificate_url: string
+          course_id: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          certificate_url?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category: string
@@ -356,6 +388,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      student_certificates: {
+        Row: {
+          certificate_number: string
+          course_id: string
+          id: string
+          issued_at: string
+          user_id: string
+        }
+        Insert: {
+          certificate_number?: string
+          course_id: string
+          id?: string
+          issued_at?: string
+          user_id: string
+        }
+        Update: {
+          certificate_number?: string
+          course_id?: string
+          id?: string
+          issued_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

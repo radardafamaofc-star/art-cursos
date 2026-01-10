@@ -16,9 +16,11 @@ import AdminStudents from "./pages/admin/AdminStudents";
 import UserManagement from "./pages/admin/UserManagement";
 import PaymentSettings from "./pages/admin/PaymentSettings";
 import Settings from "./pages/admin/Settings";
+import CourseCertificate from "./pages/admin/CourseCertificate";
 import CourseForm from "./pages/admin/CourseForm";
 import CourseModules from "./pages/admin/CourseModules";
 import StudentDashboard from "./pages/student/StudentDashboard";
+import Certificates from "./pages/student/Certificates";
 import LessonPlayer from "./pages/student/LessonPlayer";
 import NotFound from "./pages/NotFound";
 
@@ -64,6 +66,11 @@ const App = () => (
                 <CourseModules />
               </ProtectedRoute>
             } />
+            <Route path="/admin/courses/:id/certificate" element={
+              <ProtectedRoute requiredRole="admin">
+                <CourseCertificate />
+              </ProtectedRoute>
+            } />
             <Route path="/admin/students" element={
               <ProtectedRoute requiredRole="admin-only">
                 <AdminStudents />
@@ -94,6 +101,11 @@ const App = () => (
             <Route path="/student/courses" element={
               <ProtectedRoute requiredRole="student">
                 <StudentDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/student/certificates" element={
+              <ProtectedRoute requiredRole="student">
+                <Certificates />
               </ProtectedRoute>
             } />
             <Route path="/student/settings" element={
