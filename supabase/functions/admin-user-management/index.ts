@@ -64,17 +64,31 @@ Deno.serve(async (req) => {
         
         if (!email || !password) {
           return new Response(
-            JSON.stringify({ error: 'Email and password are required' }),
+            JSON.stringify({ error: 'Login and password are required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        // Create user with admin API
+        if (email.length < 2 || password.length < 2) {
+          return new Response(
+            JSON.stringify({ error: 'Login and password must be at least 2 characters' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // If not a valid email, create a fake email format for Supabase Auth
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        const authEmail = isEmail ? email : `${email}@artcursos.local`;
+
+        // Create user with admin API - bypass email validation
         const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-          email,
+          email: authEmail,
           password,
           email_confirm: true,
-          user_metadata: { full_name: full_name || '' }
+          user_metadata: { 
+            full_name: full_name || '',
+            custom_login: isEmail ? null : email // Store original login if not email
+          }
         });
 
         if (createError) {
@@ -85,15 +99,18 @@ Deno.serve(async (req) => {
         }
 
         // Update profile with role if specified
-        if (role && newUser.user) {
+        if (newUser.user) {
           await adminClient
             .from('profiles')
-            .update({ role, full_name: full_name || null })
+            .update({ 
+              role: role || 'student', 
+              full_name: full_name || null 
+            })
             .eq('user_id', newUser.user.id);
         }
 
         return new Response(
-          JSON.stringify({ success: true, user: newUser.user }),
+          JSON.stringify({ success: true, user: newUser.user, login: email }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -136,9 +153,9 @@ Deno.serve(async (req) => {
           );
         }
 
-        if (new_password.length < 6) {
+        if (new_password.length < 2) {
           return new Response(
-            JSON.stringify({ error: 'Password must be at least 6 characters' }),
+            JSON.stringify({ error: 'Password must be at least 2 characters' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
