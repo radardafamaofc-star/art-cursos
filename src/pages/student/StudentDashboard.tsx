@@ -1,12 +1,16 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
+import { BecomeCreatorBanner } from "@/components/creator/BecomeCreatorBanner";
+import { CreatorBadge } from "@/components/creator/CreatorBadge";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { 
   BookOpen, 
   Trophy, 
@@ -16,7 +20,22 @@ import {
 } from "lucide-react";
 
 export default function StudentDashboard() {
-  const { user, profile } = useAuth();
+  const { user, profile, refetchProfile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+
+  // Handle subscription success
+  useEffect(() => {
+    const subscriptionStatus = searchParams.get('subscription');
+    if (subscriptionStatus === 'success') {
+      toast.success("Parabéns! Você agora é um Criador de Conteúdo!");
+      // Refresh profile and subscription data
+      refetchProfile();
+      queryClient.invalidateQueries({ queryKey: ['creator-subscription'] });
+      // Remove the query param
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams, refetchProfile, queryClient]);
 
   const { data: enrollments } = useQuery({
     queryKey: ['my-enrollments', user?.id],
@@ -65,13 +84,18 @@ export default function StudentDashboard() {
       <DashboardSidebar />
 
       <div className="lg:pl-64">
+        <BecomeCreatorBanner />
+        
         <DashboardHeader 
           title="Minha Área"
           subtitle={`Olá, ${profile?.full_name || 'Aluno'}! Continue sua jornada de aprendizado.`}
           actions={
-            <Button asChild>
-              <Link to="/courses">Explorar Cursos</Link>
-            </Button>
+            <div className="flex items-center gap-3">
+              <CreatorBadge />
+              <Button asChild>
+                <Link to="/courses">Explorar Cursos</Link>
+              </Button>
+            </div>
           }
         />
 
