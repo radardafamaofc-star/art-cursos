@@ -5,7 +5,7 @@ import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'student';
+  requiredRole?: 'admin' | 'admin-only' | 'professor' | 'student';
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
@@ -65,11 +65,29 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   }
 
   // Check role requirements
-  if (requiredRole && profile.role !== requiredRole) {
-    if (profile.role === 'admin') {
-      return <Navigate to="/admin" replace />;
+  if (requiredRole) {
+    const isAdmin = profile.role === 'admin';
+    const isProfessor = profile.role === 'professor';
+    const isAdminOrProfessor = isAdmin || isProfessor;
+    
+    // 'admin-only' means ONLY admins can access (not professors)
+    if (requiredRole === 'admin-only' && !isAdmin) {
+      if (isProfessor) {
+        return <Navigate to="/admin/courses" replace />;
+      }
+      return <Navigate to="/student" replace />;
     }
-    return <Navigate to="/student" replace />;
+    
+    // 'admin' routes can be accessed by both admins and professors
+    if (requiredRole === 'admin' && !isAdminOrProfessor) {
+      return <Navigate to="/student" replace />;
+    }
+    
+    if (requiredRole === 'student' && profile.role !== 'student') {
+      if (isAdminOrProfessor) {
+        return <Navigate to="/admin" replace />;
+      }
+    }
   }
 
   return <>{children}</>;
