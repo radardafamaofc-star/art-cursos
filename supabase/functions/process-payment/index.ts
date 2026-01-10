@@ -307,7 +307,6 @@ async function processPushinPayPayment(config: any, course: any, customer: any, 
     },
     body: JSON.stringify({
       value: Math.round(amount * 100), // Amount in cents
-      webhook_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/payment-webhook`,
       external_reference: course.id,
       payer: {
         name: customer.name,
