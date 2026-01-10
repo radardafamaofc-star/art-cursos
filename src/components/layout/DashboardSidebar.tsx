@@ -109,6 +109,7 @@ export function DashboardSidebar() {
                 src={profile.avatar_url} 
                 alt={profile.full_name || 'Avatar'} 
                 className="w-full h-full object-cover"
+                key={profile.avatar_url}
               />
             ) : (
               profile?.full_name?.charAt(0) || 'U'

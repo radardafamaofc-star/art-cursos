@@ -31,6 +31,7 @@ interface StudentProfile {
   id: string;
   user_id: string;
   full_name: string | null;
+  avatar_url: string | null;
   created_at: string;
   blocked: boolean;
 }
@@ -174,8 +175,16 @@ export default function AdminStudents() {
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-medium">
-                    {selectedStudent.full_name?.charAt(0) || 'U'}
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-medium overflow-hidden">
+                    {selectedStudent.avatar_url ? (
+                      <img 
+                        src={selectedStudent.avatar_url} 
+                        alt={selectedStudent.full_name || 'Avatar'} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      selectedStudent.full_name?.charAt(0) || 'U'
+                    )}
                   </div>
                   <div>
                     <CardTitle>{selectedStudent.full_name || 'Sem nome'}</CardTitle>
@@ -373,8 +382,16 @@ export default function AdminStudents() {
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-                              {student.full_name?.charAt(0) || 'U'}
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium overflow-hidden">
+                              {student.avatar_url ? (
+                                <img 
+                                  src={student.avatar_url} 
+                                  alt={student.full_name || 'Avatar'} 
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                student.full_name?.charAt(0) || 'U'
+                              )}
                             </div>
                             <div>
                               <p className="font-medium">{student.full_name || 'Sem nome'}</p>
