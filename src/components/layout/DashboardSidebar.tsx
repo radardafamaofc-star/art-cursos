@@ -102,8 +102,16 @@ export function DashboardSidebar() {
 
       <div className="p-4 border-t">
         <div className="flex items-center gap-3 px-4 py-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-            {profile?.full_name?.charAt(0) || 'U'}
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium overflow-hidden">
+            {profile?.avatar_url ? (
+              <img 
+                src={profile.avatar_url} 
+                alt={profile.full_name || 'Avatar'} 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              profile?.full_name?.charAt(0) || 'U'
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{profile?.full_name || 'Usuário'}</p>
