@@ -22,6 +22,7 @@ export type Database = {
           description: string | null
           duration: string | null
           id: string
+          price: number | null
           status: string
           thumbnail_url: string | null
           title: string
@@ -34,6 +35,7 @@ export type Database = {
           description?: string | null
           duration?: string | null
           id?: string
+          price?: number | null
           status?: string
           thumbnail_url?: string | null
           title: string
@@ -46,6 +48,7 @@ export type Database = {
           description?: string | null
           duration?: string | null
           id?: string
+          price?: number | null
           status?: string
           thumbnail_url?: string | null
           title?: string

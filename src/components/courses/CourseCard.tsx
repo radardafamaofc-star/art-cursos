@@ -13,6 +13,7 @@ interface CourseCardProps {
   students: number;
   modules: number;
   category: string;
+  price?: number;
   progress?: number;
 }
 
@@ -26,8 +27,16 @@ export function CourseCard({
   students,
   modules,
   category,
+  price = 0,
   progress,
 }: CourseCardProps) {
+  const formatPrice = (value: number) => {
+    if (value === 0) return "Gratuito";
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
+  };
   return (
     <Link to={`/course/${id}`}>
       <Card variant="interactive" className="overflow-hidden h-full flex flex-col">
@@ -37,9 +46,14 @@ export function CourseCard({
             alt={title}
             className="w-full h-48 object-cover"
           />
-          <Badge className="absolute top-3 left-3" variant="secondary">
-            {category}
-          </Badge>
+          <div className="absolute top-3 left-3 right-3 flex justify-between items-start">
+            <Badge variant="secondary">
+              {category}
+            </Badge>
+            <Badge variant={price === 0 ? "default" : "secondary"} className={price === 0 ? "bg-green-600 hover:bg-green-700" : "bg-primary"}>
+              {formatPrice(price)}
+            </Badge>
+          </div>
           {progress !== undefined && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
               <div 

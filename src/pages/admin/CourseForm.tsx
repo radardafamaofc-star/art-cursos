@@ -29,6 +29,7 @@ export default function CourseForm() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Geral");
   const [duration, setDuration] = useState("");
+  const [price, setPrice] = useState("");
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>();
@@ -55,6 +56,7 @@ export default function CourseForm() {
       setDescription(course.description || "");
       setCategory(course.category);
       setDuration(course.duration || "");
+      setPrice(course.price?.toString() || "0");
       setStatus(course.status as "draft" | "published");
       setThumbnailUrl(course.thumbnail_url || undefined);
     }
@@ -95,6 +97,7 @@ export default function CourseForm() {
         description,
         category,
         duration,
+        price: parseFloat(price) || 0,
         status,
         thumbnail_url: finalThumbnailUrl,
         created_by: user.id,
@@ -213,6 +216,22 @@ export default function CourseForm() {
                           placeholder="Ex: 40h"
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Preço (R$)</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        placeholder="0.00 = Gratuito"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Deixe 0 para curso gratuito
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
