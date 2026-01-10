@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
+import { CreatorSubscriptionBanner } from "@/components/creator/CreatorSubscriptionBanner";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -109,7 +110,8 @@ export default function AdminDashboard() {
       <DashboardSidebar />
 
       <div className="lg:pl-64">
-        <DashboardHeader 
+        <CreatorSubscriptionBanner />
+        <DashboardHeader
           title="Dashboard"
           subtitle={`Bem-vindo de volta, ${profile?.full_name || 'Admin'}!`}
           actions={
