@@ -187,87 +187,142 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 }
 
 // ============================================================
-// PROXY WEBHOOK — forward message to Lovable API
+// PROXY WEBHOOK — AI processes prompt, applies changes to Lovable (no credits)
 // ============================================================
-function generateLovableId(prefix) {
-  const chars = '0123456789abcdefghjkmnpqrstvwxyz';
-  let tsStr = '';
-  let t = Date.now();
-  for (let i = 0; i < 10; i++) { tsStr = chars[t % 32] + tsStr; t = Math.floor(t / 32); }
-  let rand = '';
-  for (let i = 0; i < 16; i++) rand += chars[Math.floor(Math.random() * 32)];
-  return `${prefix}_${tsStr}${rand}`;
+
+async function callAI(message, files) {
+  const groqKey   = process.env.GROQ_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  let apiUrl, apiKey, model, headers;
+  if (groqKey) {
+    apiUrl  = 'https://api.groq.com/openai/v1/chat/completions';
+    apiKey  = groqKey;
+    model   = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    headers = { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' };
+    console.log('[ai] using Groq:', model);
+  } else if (openaiKey) {
+    apiUrl  = 'https://api.openai.com/v1/chat/completions';
+    apiKey  = openaiKey;
+    model   = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    headers = { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' };
+    console.log('[ai] using OpenAI:', model);
+  } else {
+    console.log('[ai] no AI key configured (set GROQ_API_KEY or OPENAI_API_KEY)');
+    return { text: 'Nenhuma IA configurada. Adicione GROQ_API_KEY (grátis) ou OPENAI_API_KEY nas variáveis do Railway.', changes: [] };
+  }
+
+  const MAX_FILES = 10;
+  const MAX_CHARS = 40000;
+  let fileContext = '';
+  let charCount = 0;
+  for (const f of (files || []).slice(0, MAX_FILES)) {
+    const filePath = f.path || f.name || 'unknown';
+    const content  = f.content || '';
+    const snippet  = `\n### ${filePath}\n\`\`\`\n${content}\n\`\`\`\n`;
+    if (charCount + snippet.length > MAX_CHARS) break;
+    fileContext += snippet;
+    charCount   += snippet.length;
+  }
+
+  const systemPrompt = `You are an expert web developer assistant. Given project files and a user request, respond ONLY with valid JSON (no markdown fences, no extra text):
+{
+  "text": "Brief explanation of changes (in the same language as the user's request)",
+  "changes": [
+    {"path": "relative/path/file.ext", "content": "COMPLETE new file content"}
+  ]
+}
+Rules:
+- Always include COMPLETE file content for each changed file (no diffs, no partial updates)
+- Only include files that actually need to change
+- If no file changes needed (question/clarification), return empty changes array and answer in "text"
+- Match the coding style of the existing project files`;
+
+  const userPrompt = fileContext
+    ? `Project files:${fileContext}\n\nUser request: ${message}`
+    : `User request: ${message}`;
+
+  try {
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userPrompt   },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 8192,
+        temperature: 0.2,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.log(`[ai] error ${resp.status}: ${err.substring(0, 200)}`);
+      return { text: `Erro na IA (${resp.status}). Verifique sua API key.`, changes: [] };
+    }
+
+    const data    = await resp.json();
+    const raw     = data.choices?.[0]?.message?.content || '{}';
+    const parsed  = JSON.parse(raw);
+    console.log(`[ai] reply="${(parsed.text || '').substring(0, 80)}" changes=${(parsed.changes || []).length}`);
+    return { text: parsed.text || '', changes: parsed.changes || [] };
+  } catch (err) {
+    console.log('[ai] error:', err.message);
+    return { text: `Erro interno: ${err.message}`, changes: [] };
+  }
+}
+
+async function applyChanges(projectId, token, commitMessage, changes) {
+  if (!changes || changes.length === 0) return true;
+  const url  = `https://api.lovable.dev/projects/${projectId}`;
+  const body = {
+    changes: changes.map(c => ({ path: c.path, content: c.content })),
+    uploads: [],
+    commit_message: (commitMessage || 'update').substring(0, 72),
+    file_edit_type: 'full',
+  };
+  try {
+    const resp = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'accept': '*/*',
+        'authorization': `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
+      },
+      body: JSON.stringify(body),
+    });
+    const txt = await resp.text();
+    console.log(`[apply] PUT ${url} → ${resp.status}: ${txt.substring(0, 100)}`);
+    return resp.ok;
+  } catch (err) {
+    console.log('[apply] error:', err.message);
+    return false;
+  }
 }
 
 async function forwardToLovable(payload) {
   const { message, projectId, token, files } = payload || {};
   if (!token || !projectId || !message) {
-    console.log(`[proxy] missing params: token=${!!token} projectId=${!!projectId} message=${!!message}`);
+    console.log(`[proxy] missing: token=${!!token} project=${!!projectId} message=${!!message}`);
     return { success: false, reason: 'missing params' };
   }
 
-  // Abort delay: send request to Lovable and cut connection before billing triggers
-  const ABORT_DELAY_MS = parseInt(process.env.ABORT_DELAY_MS || '200');
+  console.log(`[proxy] processing: project=${projectId} files=${(files||[]).length} msg="${message.substring(0,60)}"`);
 
-  console.log(`[proxy] → Lovable chat (abort in ${ABORT_DELAY_MS}ms): project=${projectId} msg="${message.substring(0, 50)}"`);
+  // Step 1: Our AI processes the prompt (no Lovable credits used)
+  const ai = await callAI(message, files);
 
-  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
-  const bodyObj = {
-    id: generateLovableId('umsg'),
-    ai_message_id: generateLovableId('aimsg'),
-    message,
-    files: files || [],
-    chat_only: false,
-    client_logs: [],
-    current_page: '/',
-    current_viewport_dpr: 1,
-    current_viewport_height: 887,
-    current_viewport_width: 582,
-    integration_metadata: { preview_viewport_width: 582, preview_viewport_height: 887, is_logged_out: false },
-    model: null,
-    network_requests: [],
-    optimisticImageUrls: [],
-    runtime_errors: [],
-    selected_elements: [],
-    session_replay: '[]',
-    thread_id: 'main',
-    view: 'preview',
-    view_description: 'The user is currently viewing the preview.',
-  };
+  // Step 2: Apply changes directly via PUT (confirmed credit-free endpoint)
+  if (ai.changes.length > 0) {
+    await applyChanges(projectId, token, message, ai.changes);
+  }
 
-  const controller = new AbortController();
-
-  // Fire the request — intentionally do NOT await yet
-  const fetchPromise = fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Origin': 'https://lovable.dev',
-      'Referer': `https://lovable.dev/projects/${projectId}`,
-      'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
-    },
-    body: JSON.stringify(bodyObj),
-    signal: controller.signal,
-  }).catch(err => {
-    if (err.name === 'AbortError') {
-      console.log('[proxy] connection aborted — credit bypass active');
-    } else {
-      console.log('[proxy] fetch error:', err.message);
-    }
-    return null;
-  });
-
-  // Wait just enough for Lovable to receive + enqueue the request,
-  // then abort before the response (and credit deduction) completes
-  await new Promise(resolve => setTimeout(resolve, ABORT_DELAY_MS));
-  controller.abort();
-
-  // Let the aborted fetch settle
-  await fetchPromise;
-
-  console.log('[proxy] aborted — request sent, credits not charged');
-  return { success: true, reply: null };
+  // Step 3: Return reply for the extension's own chat UI
+  return { success: true, reply: ai.text };
 }
 
 // ============================================================
