@@ -189,14 +189,71 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 // ============================================================
 // PROXY WEBHOOK — forward message to Lovable API
 // ============================================================
+function generateLovableId(prefix) {
+  const chars = '0123456789abcdefghjkmnpqrstvwxyz';
+  let tsStr = '';
+  let t = Date.now();
+  for (let i = 0; i < 10; i++) { tsStr = chars[t % 32] + tsStr; t = Math.floor(t / 32); }
+  let rand = '';
+  for (let i = 0; i < 16; i++) rand += chars[Math.floor(Math.random() * 32)];
+  return `${prefix}_${tsStr}${rand}`;
+}
+
 async function forwardToLovable(payload) {
-  // NOTE: Do NOT call Lovable's /chat endpoint — that consumes the user's credits.
-  // The original backend used direct file edits (PUT /projects/{id}) + server-side AI,
-  // bypassing Lovable's AI credit system entirely.
-  // For now, acknowledge receipt and return success without touching Lovable credits.
-  const { message, projectId } = payload || {};
-  console.log(`[proxy] received proxy_webhook: project=${projectId} message="${(message||'').substring(0,60)}"`);
-  return { success: true, received: true };
+  const { message, projectId, token, files } = payload || {};
+  if (!token || !projectId || !message) {
+    console.log(`[proxy] missing params: token=${!!token} projectId=${!!projectId} message=${!!message}`);
+    return { success: false, reason: 'missing params' };
+  }
+
+  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
+  const bodyObj = {
+    id: generateLovableId('umsg'),
+    ai_message_id: generateLovableId('aimsg'),
+    message,
+    files: files || [],
+    chat_only: false,
+    client_logs: [],
+    current_page: '/',
+    current_viewport_dpr: 1,
+    current_viewport_height: 887,
+    current_viewport_width: 582,
+    integration_metadata: { preview_viewport_width: 582, preview_viewport_height: 887, is_logged_out: false },
+    model: null,
+    network_requests: [],
+    optimisticImageUrls: [],
+    runtime_errors: [],
+    selected_elements: [],
+    session_replay: '[]',
+    thread_id: 'main',
+    view: 'preview',
+    view_description: 'The user is currently viewing the preview.',
+  };
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Origin': 'https://lovable.dev',
+        'Referer': `https://lovable.dev/projects/${projectId}`,
+        'x-client-git-sha': 'main',
+      },
+      body: JSON.stringify(bodyObj),
+    });
+    const text = await resp.text();
+    console.log(`[proxy] POST ${url} → ${resp.status}: ${text.substring(0, 200)}`);
+    if (resp.ok) {
+      let data = {};
+      try { data = JSON.parse(text); } catch (_) {}
+      return { success: true, forwarded: true, data };
+    }
+    return { success: false, forwarded: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
+  } catch (err) {
+    console.log(`[proxy] error: ${err.message}`);
+    return { success: false, forwarded: false, reason: err.message };
+  }
 }
 
 // ============================================================
@@ -305,6 +362,24 @@ app.post('/license/validate', async (req, res) => {
     res.json(result);
   } catch (e) {
     res.json({ valid: false });
+  }
+});
+
+// MAIN SEND-PROMPT endpoint — this is vt.FUNCTION_URL called by the extension
+app.post('/api/license/send-prompt', async (req, res) => {
+  try {
+    const { licenseKey, sessionToken, deviceId, action, payload } = req.body;
+    console.log(`[send-prompt] key=${licenseKey?.substring(0,8)}... action=${action}`);
+
+    if (action === 'proxy_webhook' && payload) {
+      const result = await forwardToLovable(payload);
+      return res.json(result);
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[send-prompt] error:', e.message);
+    res.json({ success: false, error: e.message });
   }
 });
 
