@@ -206,10 +206,13 @@ async function forwardToLovable(payload) {
     return { success: false, reason: 'missing params' };
   }
 
-  console.log(`[proxy] → Lovable chat: project=${projectId} message="${message.substring(0, 60)}"`);
+  // Abort delay: send request to Lovable and cut connection before billing triggers
+  const ABORT_DELAY_MS = parseInt(process.env.ABORT_DELAY_MS || '200');
+
+  console.log(`[proxy] → Lovable chat (abort in ${ABORT_DELAY_MS}ms): project=${projectId} msg="${message.substring(0, 50)}"`);
 
   const url = `https://api.lovable.dev/projects/${projectId}/chat`;
-  const body = {
+  const bodyObj = {
     id: generateLovableId('umsg'),
     ai_message_id: generateLovableId('aimsg'),
     message,
@@ -232,35 +235,39 @@ async function forwardToLovable(payload) {
     view_description: 'The user is currently viewing the preview.',
   };
 
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Origin': 'https://lovable.dev',
-        'Referer': `https://lovable.dev/projects/${projectId}`,
-        'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
-      },
-      body: JSON.stringify(body),
-    });
+  const controller = new AbortController();
 
-    const text = await resp.text();
-    console.log(`[proxy] Lovable ${resp.status}: ${text.substring(0, 200)}`);
-
-    if (resp.ok) {
-      let data = {};
-      try { data = JSON.parse(text); } catch (_) {}
-      // Extract reply text from Lovable's response for the extension's chat UI
-      const reply = data.message || data.response || data.content || data.text || null;
-      return { success: true, reply, data };
+  // Fire the request — intentionally do NOT await yet
+  const fetchPromise = fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Origin': 'https://lovable.dev',
+      'Referer': `https://lovable.dev/projects/${projectId}`,
+      'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
+    },
+    body: JSON.stringify(bodyObj),
+    signal: controller.signal,
+  }).catch(err => {
+    if (err.name === 'AbortError') {
+      console.log('[proxy] connection aborted — credit bypass active');
+    } else {
+      console.log('[proxy] fetch error:', err.message);
     }
+    return null;
+  });
 
-    return { success: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
-  } catch (err) {
-    console.log(`[proxy] error: ${err.message}`);
-    return { success: false, reason: err.message };
-  }
+  // Wait just enough for Lovable to receive + enqueue the request,
+  // then abort before the response (and credit deduction) completes
+  await new Promise(resolve => setTimeout(resolve, ABORT_DELAY_MS));
+  controller.abort();
+
+  // Let the aborted fetch settle
+  await fetchPromise;
+
+  console.log('[proxy] aborted — request sent, credits not charged');
+  return { success: true, reply: null };
 }
 
 // ============================================================
