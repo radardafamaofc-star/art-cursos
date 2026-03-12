@@ -193,25 +193,15 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 // Magic tag appended to every message — Lovable detects this and skips billing
 const BYPASS_TAG = ' <details><summary>⚙️ </summary> </details>';
 
-async function forwardToLovable(payload) {
-  const { message, projectId, token, files } = payload || {};
-  if (!token || !projectId || !message) {
-    console.log(`[proxy] missing: token=${!!token} project=${!!projectId} message=${!!message}`);
-    return { success: false, reason: 'missing params' };
-  }
-
-  // Append the bypass tag exactly as the original server did
-  const patchedMessage = message + BYPASS_TAG;
-
-  console.log(`[proxy] → Lovable /chat: project=${projectId} msg="${message.substring(0,50)}" (bypass tag appended)`);
-
+async function postChatOnly(projectId, token, summaryText) {
+  // Send a chat_only message to appear in Lovable's UI — does not trigger AI or billing
   const url = `https://api.lovable.dev/projects/${projectId}/chat`;
   const body = {
     id: generateLovableId('umsg'),
     ai_message_id: generateLovableId('aimsg'),
-    message: patchedMessage,
-    files: files || [],
-    chat_only: false,
+    message: summaryText + BYPASS_TAG,
+    files: [],
+    chat_only: true,
     client_logs: [],
     current_page: '/',
     current_viewport_dpr: 1,
@@ -228,7 +218,6 @@ async function forwardToLovable(payload) {
     view: 'preview',
     view_description: 'The user is currently viewing the preview.',
   };
-
   try {
     const resp = await fetch(url, {
       method: 'POST',
@@ -241,22 +230,38 @@ async function forwardToLovable(payload) {
       },
       body: JSON.stringify(body),
     });
-
-    const text = await resp.text();
-    console.log(`[proxy] Lovable ${resp.status}: ${text.substring(0, 200)}`);
-
-    if (resp.ok) {
-      let data = {};
-      try { data = JSON.parse(text); } catch (_) {}
-      const reply = data.message || data.response || data.content || data.text || null;
-      return { success: true, reply };
-    }
-
-    return { success: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
+    const txt = await resp.text();
+    console.log(`[chat_only] ${resp.status}: ${txt.substring(0, 100)}`);
   } catch (err) {
-    console.log(`[proxy] error: ${err.message}`);
-    return { success: false, reason: err.message };
+    console.log(`[chat_only] error: ${err.message}`);
   }
+}
+
+async function forwardToLovable(payload) {
+  const { message, projectId, token, files } = payload || {};
+  if (!token || !projectId || !message) {
+    console.log(`[proxy] missing: token=${!!token} project=${!!projectId} message=${!!message}`);
+    return { success: false, reason: 'missing params' };
+  }
+
+  console.log(`[proxy] processing: project=${projectId} files=${(files||[]).length} msg="${message.substring(0,60)}"`);
+
+  // Step 1: Use our own AI to process the prompt (zero Lovable credits)
+  const ai = await callAI(message, files);
+  console.log(`[proxy] AI reply="${(ai.text||'').substring(0,80)}" changes=${ai.changes.length}`);
+
+  // Step 2: Apply file changes directly via PUT (confirmed credit-free)
+  if (ai.changes.length > 0) {
+    await applyChanges(projectId, token, message, ai.changes);
+  }
+
+  // Step 3: Post a chat_only message to Lovable so the summary appears in their UI
+  // chat_only=true = display in chat without running Lovable's AI = 0 credits
+  if (ai.text) {
+    postChatOnly(projectId, token, ai.text).catch(() => {});
+  }
+
+  return { success: true, reply: ai.text };
 }
 
 function generateLovableId(prefix) {
