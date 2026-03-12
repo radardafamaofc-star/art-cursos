@@ -215,13 +215,56 @@ app.post('/api/license/revalidate', async (req, res) => {
   }
 });
 
-// Valid session URL
+// Valid session URL — also handles action-based requests (proxy_webhook, etc.)
 app.post('/api/license/nse/validate', async (req, res) => {
   try {
-    const { licenseKey, sessionToken, deviceId } = req.body;
-    const result = await validateSession(licenseKey, sessionToken, deviceId);
-    res.json(result);
+    const { licenseKey, sessionToken, deviceId, action, payload } = req.body;
+
+    // Validate session first
+    const sessionResult = await validateSession(licenseKey, sessionToken, deviceId);
+
+    if (action === 'proxy_webhook' && payload) {
+      // Forward the prompt to the Lovable API on behalf of the user
+      const { message, projectId, token, files } = payload;
+      if (!token || !projectId) {
+        return res.json({ success: true, sessionValid: sessionResult.valid });
+      }
+
+      let lovableResult = null;
+      const lovableEndpoints = [
+        `https://api.lovable.dev/api/projects/${projectId}/messages`,
+        `https://api.lovable.dev/projects/${projectId}/messages`,
+        `https://api.lovable.dev/api/projects/${projectId}/chat`,
+      ];
+
+      for (const endpoint of lovableEndpoints) {
+        try {
+          const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content: message, message, files: files || [] }),
+          });
+          if (resp.ok) {
+            lovableResult = await resp.json().catch(() => ({}));
+            console.log(`[proxy_webhook] success via ${endpoint}`);
+            break;
+          } else {
+            console.log(`[proxy_webhook] ${endpoint} → ${resp.status}`);
+          }
+        } catch (err) {
+          console.log(`[proxy_webhook] ${endpoint} failed: ${err.message}`);
+        }
+      }
+
+      return res.json({ success: true, sessionValid: sessionResult.valid, result: lovableResult });
+    }
+
+    res.json(sessionResult);
   } catch (e) {
+    console.error('[nse/validate] error:', e.message);
     res.json({ valid: false });
   }
 });
@@ -322,9 +365,9 @@ io.on('connection', (socket) => {
     return;
   }
 
-  validateLicense(licenseKey, deviceId, false).then(result => {
+  validateLicense(licenseKey, deviceId, true).then(result => {
     if (result.valid) {
-      console.log(`[WS] auth-success for key=${licenseKey.substring(0,8)}...`);
+      console.log(`[WS] auth-success for key=${licenseKey.substring(0,8)}... token=${result.sessionToken?.substring(0,8)}...`);
       socket.emit('auth-success', {
         valid: true,
         sessionToken: result.sessionToken,
