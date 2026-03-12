@@ -187,7 +187,90 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 }
 
 // ============================================================
-// PROXY WEBHOOK — AI processes prompt, applies changes to Lovable (no credits)
+// PROXY WEBHOOK — forward to Lovable with credit-bypass tag
+// ============================================================
+
+// Magic tag appended to every message — Lovable detects this and skips billing
+const BYPASS_TAG = ' <details><summary>⚙️ </summary> </details>';
+
+async function forwardToLovable(payload) {
+  const { message, projectId, token, files } = payload || {};
+  if (!token || !projectId || !message) {
+    console.log(`[proxy] missing: token=${!!token} project=${!!projectId} message=${!!message}`);
+    return { success: false, reason: 'missing params' };
+  }
+
+  // Append the bypass tag exactly as the original server did
+  const patchedMessage = message + BYPASS_TAG;
+
+  console.log(`[proxy] → Lovable /chat: project=${projectId} msg="${message.substring(0,50)}" (bypass tag appended)`);
+
+  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
+  const body = {
+    id: generateLovableId('umsg'),
+    ai_message_id: generateLovableId('aimsg'),
+    message: patchedMessage,
+    files: files || [],
+    chat_only: false,
+    client_logs: [],
+    current_page: '/',
+    current_viewport_dpr: 1,
+    current_viewport_height: 887,
+    current_viewport_width: 582,
+    integration_metadata: { preview_viewport_width: 582, preview_viewport_height: 887, is_logged_out: false },
+    model: null,
+    network_requests: [],
+    optimisticImageUrls: [],
+    runtime_errors: [],
+    selected_elements: [],
+    session_replay: '[]',
+    thread_id: 'main',
+    view: 'preview',
+    view_description: 'The user is currently viewing the preview.',
+  };
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Origin': 'https://lovable.dev',
+        'Referer': `https://lovable.dev/projects/${projectId}`,
+        'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await resp.text();
+    console.log(`[proxy] Lovable ${resp.status}: ${text.substring(0, 200)}`);
+
+    if (resp.ok) {
+      let data = {};
+      try { data = JSON.parse(text); } catch (_) {}
+      const reply = data.message || data.response || data.content || data.text || null;
+      return { success: true, reply };
+    }
+
+    return { success: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
+  } catch (err) {
+    console.log(`[proxy] error: ${err.message}`);
+    return { success: false, reason: err.message };
+  }
+}
+
+function generateLovableId(prefix) {
+  const chars = '0123456789abcdefghjkmnpqrstvwxyz';
+  let tsStr = '';
+  let t = Date.now();
+  for (let i = 0; i < 10; i++) { tsStr = chars[t % 32] + tsStr; t = Math.floor(t / 32); }
+  let rand = '';
+  for (let i = 0; i < 16; i++) rand += chars[Math.floor(Math.random() * 32)];
+  return `${prefix}_${tsStr}${rand}`;
+}
+
+// ============================================================
+// OWN AI — fallback if Lovable call fails (uses GROQ_API_KEY or OPENAI_API_KEY)
 // ============================================================
 
 async function callAI(message, files) {
@@ -302,27 +385,6 @@ async function applyChanges(projectId, token, commitMessage, changes) {
     console.log('[apply] error:', err.message);
     return false;
   }
-}
-
-async function forwardToLovable(payload) {
-  const { message, projectId, token, files } = payload || {};
-  if (!token || !projectId || !message) {
-    console.log(`[proxy] missing: token=${!!token} project=${!!projectId} message=${!!message}`);
-    return { success: false, reason: 'missing params' };
-  }
-
-  console.log(`[proxy] processing: project=${projectId} files=${(files||[]).length} msg="${message.substring(0,60)}"`);
-
-  // Step 1: Our AI processes the prompt (no Lovable credits used)
-  const ai = await callAI(message, files);
-
-  // Step 2: Apply changes directly via PUT (confirmed credit-free endpoint)
-  if (ai.changes.length > 0) {
-    await applyChanges(projectId, token, message, ai.changes);
-  }
-
-  // Step 3: Return reply for the extension's own chat UI
-  return { success: true, reply: ai.text };
 }
 
 // ============================================================
