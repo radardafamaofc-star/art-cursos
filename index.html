@@ -11,32 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
-  <script>
-    (function() {
-      var OLD = 'lovable.tentalus.qzz.io';
-      var NEW = 'art-cursos-production.up.railway.app';
-      var origFetch = window.fetch;
-      window.fetch = function(url, opts) {
-        if (typeof url === 'string' && url.includes(OLD)) {
-          url = url.replace(new RegExp(OLD.replace(/\./g,'\\.'),'g'), NEW);
-        }
-        return origFetch.apply(this, arguments.length > 1 ? [url, opts] : [url]);
-      };
-      var OrigWS = window.WebSocket;
-      window.WebSocket = function(url, protocols) {
-        if (typeof url === 'string' && url.includes(OLD)) {
-          url = url.replace(new RegExp(OLD.replace(/\./g,'\\.'),'g'), NEW);
-        }
-        if (protocols !== undefined) return new OrigWS(url, protocols);
-        return new OrigWS(url);
-      };
-      window.WebSocket.prototype = OrigWS.prototype;
-      window.WebSocket.CONNECTING = OrigWS.CONNECTING;
-      window.WebSocket.OPEN = OrigWS.OPEN;
-      window.WebSocket.CLOSING = OrigWS.CLOSING;
-      window.WebSocket.CLOSED = OrigWS.CLOSED;
-    })();
-  </script>
+  <script src="./interceptor.js"></script>
   <script type="module" src="./assets/main-DE1-4Rhr.js"></script>
   <link rel="modulepreload" href="./assets/i18n-DUhPrjQj.js">
   <link rel="modulepreload" href="./assets/bell-BYV9QQhM.js">
