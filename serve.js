@@ -187,55 +187,8 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 }
 
 // ============================================================
-// PROXY WEBHOOK — forward to Lovable with credit-bypass tag
+// PROXY WEBHOOK — Groq AI + PUT file edit (zero Lovable credits)
 // ============================================================
-
-// Magic tag appended to every message — Lovable detects this and skips billing
-const BYPASS_TAG = ' <details><summary>⚙️ </summary> </details>';
-
-async function postChatOnly(projectId, token, summaryText) {
-  // Send a chat_only message to appear in Lovable's UI — does not trigger AI or billing
-  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
-  const body = {
-    id: generateLovableId('umsg'),
-    ai_message_id: generateLovableId('aimsg'),
-    message: summaryText + BYPASS_TAG,
-    files: [],
-    chat_only: true,
-    client_logs: [],
-    current_page: '/',
-    current_viewport_dpr: 1,
-    current_viewport_height: 887,
-    current_viewport_width: 582,
-    integration_metadata: { preview_viewport_width: 582, preview_viewport_height: 887, is_logged_out: false },
-    model: null,
-    network_requests: [],
-    optimisticImageUrls: [],
-    runtime_errors: [],
-    selected_elements: [],
-    session_replay: '[]',
-    thread_id: 'main',
-    view: 'preview',
-    view_description: 'The user is currently viewing the preview.',
-  };
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Origin': 'https://lovable.dev',
-        'Referer': `https://lovable.dev/projects/${projectId}`,
-        'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
-      },
-      body: JSON.stringify(body),
-    });
-    const txt = await resp.text();
-    console.log(`[chat_only] ${resp.status}: ${txt.substring(0, 100)}`);
-  } catch (err) {
-    console.log(`[chat_only] error: ${err.message}`);
-  }
-}
 
 async function forwardToLovable(payload) {
   const { message, projectId, token, files } = payload || {};
@@ -244,23 +197,19 @@ async function forwardToLovable(payload) {
     return { success: false, reason: 'missing params' };
   }
 
-  console.log(`[proxy] processing: project=${projectId} files=${(files||[]).length} msg="${message.substring(0,60)}"`);
+  console.log(`[proxy] project=${projectId} files=${(files||[]).length} msg="${message.substring(0,60)}"`);
 
-  // Step 1: Use our own AI to process the prompt (zero Lovable credits)
+  // Step 1: Groq AI processes the prompt — zero Lovable credits
   const ai = await callAI(message, files);
-  console.log(`[proxy] AI reply="${(ai.text||'').substring(0,80)}" changes=${ai.changes.length}`);
+  console.log(`[proxy] AI: "${(ai.text||'').substring(0,80)}" | changes=${ai.changes.length}`);
 
-  // Step 2: Apply file changes directly via PUT (confirmed credit-free)
+  // Step 2: Apply file changes via PUT — confirmed credit-free endpoint
   if (ai.changes.length > 0) {
     await applyChanges(projectId, token, message, ai.changes);
   }
 
-  // Step 3: Post a chat_only message to Lovable so the summary appears in their UI
-  // chat_only=true = display in chat without running Lovable's AI = 0 credits
-  if (ai.text) {
-    postChatOnly(projectId, token, ai.text).catch(() => {});
-  }
-
+  // Return the AI reply to the extension's own chat UI
+  // We do NOT call Lovable's /chat at all — that's what was consuming credits
   return { success: true, reply: ai.text };
 }
 
