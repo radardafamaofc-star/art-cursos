@@ -1,0 +1,54 @@
+{
+    "manifest_version": 3,
+    "name": "Lovable Infinite",
+    "version": "1.0.12",
+    "description": "Gere prompts infinitos e ilimitados.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage",
+        "webRequest",
+        "sidePanel",
+        "tabs",
+        "system.cpu"
+    ],
+    "host_permissions": [
+        "https://lovable.dev/*",
+        "https://api.lovable.dev/*",
+        "https://lovable.tentalus.qzz.io/*",
+        "https://thispersonnotexist.org/*"
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_title": "Abrir Lovable Infinite",
+        "default_icon": {
+            "16": "icon.png",
+            "48": "icon.png",
+            "128": "icon.png"
+        }
+    },
+    "side_panel": {
+        "default_path": "index.html"
+    },
+    "icons": {
+        "16": "icon.png",
+        "48": "icon.png",
+        "128": "icon.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://lovable.dev/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ]
+}
