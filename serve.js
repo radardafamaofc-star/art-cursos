@@ -189,14 +189,106 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 // ============================================================
 // PROXY WEBHOOK — forward message to Lovable API
 // ============================================================
-function generateLovableId(prefix) {
-  const chars = '0123456789abcdefghjkmnpqrstvwxyz';
-  let tsStr = '';
-  let t = Date.now();
-  for (let i = 0; i < 10; i++) { tsStr = chars[t % 32] + tsStr; t = Math.floor(t / 32); }
-  let rand = '';
-  for (let i = 0; i < 16; i++) rand += chars[Math.floor(Math.random() * 32)];
-  return `${prefix}_${tsStr}${rand}`;
+// ── AI processing (uses own AI key, never Lovable credits) ──────────────────
+async function callAI(message, files) {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) {
+    console.log('[ai] no OPENAI_API_KEY, returning stub reply');
+    return { text: 'Configuração de IA necessária. Adicione OPENAI_API_KEY nas variáveis de ambiente.', changes: [] };
+  }
+
+  // Build file context (limit to avoid token overflow)
+  const MAX_FILES = 8;
+  const MAX_CHARS = 30000;
+  let fileContext = '';
+  let charCount = 0;
+  for (const f of (files || []).slice(0, MAX_FILES)) {
+    const path = f.path || f.name || 'unknown';
+    const content = f.content || '';
+    const snippet = `\n### File: ${path}\n\`\`\`\n${content}\n\`\`\`\n`;
+    if (charCount + snippet.length > MAX_CHARS) break;
+    fileContext += snippet;
+    charCount += snippet.length;
+  }
+
+  const systemPrompt = `You are an expert web developer. The user wants to modify their project.
+Given the current project files and a user request, respond ONLY with a valid JSON object (no markdown, no extra text):
+{
+  "text": "Brief explanation of the changes made (in the same language as the user's request)",
+  "changes": [
+    {"path": "relative/file/path.ext", "content": "COMPLETE new file content"}
+  ]
+}
+Rules:
+- Include COMPLETE file content in each change (not just the diff)
+- Only include files that need to be changed
+- Match the coding style of the existing files
+- If no file changes are needed (e.g. user is asking a question), return empty changes array and answer in text field`;
+
+  const userPrompt = `Project files:${fileContext}\n\nUser request: ${message}`;
+
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 4096,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.log(`[ai] OpenAI error ${resp.status}: ${err.substring(0, 150)}`);
+      return { text: `Erro na IA: ${resp.status}`, changes: [] };
+    }
+
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    console.log(`[ai] OpenAI response: ${content.substring(0, 150)}`);
+    const parsed = JSON.parse(content);
+    return { text: parsed.text || '', changes: parsed.changes || [] };
+  } catch (err) {
+    console.log('[ai] error:', err.message);
+    return { text: `Erro: ${err.message}`, changes: [] };
+  }
+}
+
+async function applyFileChanges(projectId, token, message, changes) {
+  if (!changes || changes.length === 0) return true;
+  const url = `https://api.lovable.dev/projects/${projectId}`;
+  const body = {
+    changes: changes.map(c => ({ path: c.path, content: c.content })),
+    uploads: [],
+    commit_message: message.substring(0, 72),
+    file_edit_type: 'full',
+  };
+  try {
+    const resp = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'accept': '*/*',
+        'authorization': `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-client-git-sha': 'b8b07b9f4b4ea48a8dfdca5721b369',
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    console.log(`[file-edit] PUT ${url} → ${resp.status}: ${text.substring(0, 150)}`);
+    return resp.ok;
+  } catch (err) {
+    console.log('[file-edit] error:', err.message);
+    return false;
+  }
 }
 
 async function forwardToLovable(payload) {
@@ -206,54 +298,19 @@ async function forwardToLovable(payload) {
     return { success: false, reason: 'missing params' };
   }
 
-  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
-  const bodyObj = {
-    id: generateLovableId('umsg'),
-    ai_message_id: generateLovableId('aimsg'),
-    message,
-    files: files || [],
-    chat_only: false,
-    client_logs: [],
-    current_page: '/',
-    current_viewport_dpr: 1,
-    current_viewport_height: 887,
-    current_viewport_width: 582,
-    integration_metadata: { preview_viewport_width: 582, preview_viewport_height: 887, is_logged_out: false },
-    model: null,
-    network_requests: [],
-    optimisticImageUrls: [],
-    runtime_errors: [],
-    selected_elements: [],
-    session_replay: '[]',
-    thread_id: 'main',
-    view: 'preview',
-    view_description: 'The user is currently viewing the preview.',
-  };
+  console.log(`[proxy] processing: project=${projectId} message="${message.substring(0, 60)}" files=${(files||[]).length}`);
 
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Origin': 'https://lovable.dev',
-        'Referer': `https://lovable.dev/projects/${projectId}`,
-        'x-client-git-sha': 'main',
-      },
-      body: JSON.stringify(bodyObj),
-    });
-    const text = await resp.text();
-    console.log(`[proxy] POST ${url} → ${resp.status}: ${text.substring(0, 200)}`);
-    if (resp.ok) {
-      let data = {};
-      try { data = JSON.parse(text); } catch (_) {}
-      return { success: true, forwarded: true, data };
-    }
-    return { success: false, forwarded: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
-  } catch (err) {
-    console.log(`[proxy] error: ${err.message}`);
-    return { success: false, forwarded: false, reason: err.message };
+  // Step 1: Use our own AI to process the prompt (NO Lovable credits consumed)
+  const aiResult = await callAI(message, files);
+  console.log(`[proxy] AI reply="${aiResult.text.substring(0, 80)}" changes=${aiResult.changes.length}`);
+
+  // Step 2: Apply file changes directly to Lovable project (no credit charge)
+  if (aiResult.changes.length > 0) {
+    await applyFileChanges(projectId, token, message, aiResult.changes);
   }
+
+  // Step 3: Return the reply for the extension's chat UI
+  return { success: true, reply: aiResult.text };
 }
 
 // ============================================================
