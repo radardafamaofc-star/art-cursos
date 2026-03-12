@@ -190,49 +190,55 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 // PROXY WEBHOOK — forward message to Lovable API
 // ============================================================
 async function forwardToLovable(payload) {
-  const { message, projectId, token, files } = payload || {};
+  const { message, projectId, token, files, source } = payload || {};
   if (!token || !projectId || !message) {
+    console.log(`[proxy] missing params: token=${!!token} projectId=${!!projectId} message=${!!message}`);
     return { forwarded: false, reason: 'missing params' };
   }
 
-  const body = JSON.stringify({
-    message,
-    content: message,
-    prompt: message,
-    files: files || [],
-  });
+  // Confirmed endpoint via browser Network tab: POST /projects/{projectId}/chat
+  const url = `https://api.lovable.dev/projects/${projectId}/chat`;
 
   const headers = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
-    'x-client-git-sha': 'main',
     'Origin': 'https://lovable.dev',
-    'Referer': 'https://lovable.dev/',
+    'Referer': `https://lovable.dev/projects/${projectId}`,
+    'x-client-git-sha': 'main',
   };
 
-  const endpoints = [
-    `https://api.lovable.dev/api/projects/${projectId}/messages`,
-    `https://api.lovable.dev/projects/${projectId}/messages`,
-    `https://api.lovable.dev/api/projects/${projectId}/prompt`,
-    `https://api.lovable.dev/projects/${projectId}/prompt`,
-    `https://api.lovable.dev/api/projects/${projectId}/chat`,
+  // Try multiple body formats (most likely first)
+  const bodyFormats = [
+    { message, imageUrls: [], files: files || [] },
+    { message },
+    { content: message, files: files || [] },
+    { prompt: message, projectId, files: files || [] },
   ];
 
-  for (const url of endpoints) {
+  for (const bodyObj of bodyFormats) {
+    const body = JSON.stringify(bodyObj);
     try {
       const resp = await fetch(url, { method: 'POST', headers, body });
       const text = await resp.text();
-      console.log(`[proxy] ${url} → ${resp.status}: ${text.substring(0, 120)}`);
+      console.log(`[proxy] POST ${url} (${JSON.stringify(bodyObj).substring(0,60)}) → ${resp.status}: ${text.substring(0, 150)}`);
       if (resp.ok) {
         let data = {};
         try { data = JSON.parse(text); } catch (_) {}
         return { forwarded: true, url, data };
       }
+      if (resp.status === 400) {
+        // Wrong format - try next
+        continue;
+      }
+      if (resp.status === 401 || resp.status === 403) {
+        // Auth failure - token issue, no point trying other formats
+        return { forwarded: false, reason: `auth_error_${resp.status}`, details: text.substring(0, 100) };
+      }
     } catch (err) {
       console.log(`[proxy] ${url} error: ${err.message}`);
     }
   }
-  return { forwarded: false, reason: 'all endpoints failed' };
+  return { forwarded: false, reason: 'all body formats failed' };
 }
 
 // ============================================================
