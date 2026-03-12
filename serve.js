@@ -187,14 +187,68 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 }
 
 // ============================================================
+// PROXY WEBHOOK — forward message to Lovable API
+// ============================================================
+async function forwardToLovable(payload) {
+  const { message, projectId, token, files } = payload || {};
+  if (!token || !projectId || !message) {
+    return { forwarded: false, reason: 'missing params' };
+  }
+
+  const body = JSON.stringify({
+    message,
+    content: message,
+    prompt: message,
+    files: files || [],
+  });
+
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'x-client-git-sha': 'main',
+    'Origin': 'https://lovable.dev',
+    'Referer': 'https://lovable.dev/',
+  };
+
+  const endpoints = [
+    `https://api.lovable.dev/api/projects/${projectId}/messages`,
+    `https://api.lovable.dev/projects/${projectId}/messages`,
+    `https://api.lovable.dev/api/projects/${projectId}/prompt`,
+    `https://api.lovable.dev/projects/${projectId}/prompt`,
+    `https://api.lovable.dev/api/projects/${projectId}/chat`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const resp = await fetch(url, { method: 'POST', headers, body });
+      const text = await resp.text();
+      console.log(`[proxy] ${url} → ${resp.status}: ${text.substring(0, 120)}`);
+      if (resp.ok) {
+        let data = {};
+        try { data = JSON.parse(text); } catch (_) {}
+        return { forwarded: true, url, data };
+      }
+    } catch (err) {
+      console.log(`[proxy] ${url} error: ${err.message}`);
+    }
+  }
+  return { forwarded: false, reason: 'all endpoints failed' };
+}
+
+// ============================================================
 // API ROUTES (imita lovable.tentalus.qzz.io)
 // ============================================================
 
 // License validate / create session
 app.post('/api/license/validate', async (req, res) => {
   try {
-    const { licenseKey, deviceId, action, create_session } = req.body;
+    const { licenseKey, deviceId, action, create_session, payload, sessionToken } = req.body;
     console.log(`[license/validate] key=${licenseKey?.substring(0,8)}... action=${action}`);
+
+    if (action === 'proxy_webhook' && payload) {
+      const result = await forwardToLovable(payload);
+      return res.json({ success: true, ...result });
+    }
 
     const result = await validateLicense(licenseKey, deviceId, create_session || action === 'activate');
     res.json(result);
@@ -272,7 +326,13 @@ app.post('/api/license/nse/validate', async (req, res) => {
 // Also handle the obfuscated path variant
 app.post('/license/validate', async (req, res) => {
   try {
-    const { licenseKey, sessionToken, deviceId, action, create_session } = req.body;
+    const { licenseKey, sessionToken, deviceId, action, create_session, payload } = req.body;
+
+    if (action === 'proxy_webhook' && payload) {
+      const result = await forwardToLovable(payload);
+      return res.json({ success: true, ...result });
+    }
+
     if (sessionToken) {
       const result = await validateSession(licenseKey, sessionToken, deviceId);
       return res.json(result);
@@ -284,18 +344,20 @@ app.post('/license/validate', async (req, res) => {
   }
 });
 
-// Prompt enhance
+// Prompt enhance — also handles proxy_webhook if extension sends it here
 app.post('/api/license-prompt', async (req, res) => {
   try {
-    const { licenseKey, sessionToken, prompt } = req.body;
-    const sessionResult = await validateSession(licenseKey, sessionToken, null);
-    if (!sessionResult.valid) {
-      return res.status(401).json({ error: 'Invalid session' });
+    const { licenseKey, sessionToken, prompt, action, payload } = req.body;
+
+    if (action === 'proxy_webhook' && payload) {
+      const result = await forwardToLovable(payload);
+      return res.json({ success: true, ...result });
     }
-    // Return enhanced prompt (pass-through, enhancement is optional)
-    res.json({ enhancedPrompt: prompt, success: true });
+
+    // Return enhanced prompt (pass-through)
+    res.json({ enhancedPrompt: prompt || '', success: true });
   } catch (e) {
-    res.json({ enhancedPrompt: req.body.prompt || '', success: true });
+    res.json({ enhancedPrompt: req.body?.prompt || '', success: true });
   }
 });
 
@@ -339,7 +401,12 @@ app.post('/api/proxy-webhook', async (req, res) => {
 
 // Catch-all API routes
 app.post('/api/*path', async (req, res) => {
-  console.log(`[API catch-all] POST ${req.path}`, JSON.stringify(req.body).substring(0, 100));
+  const { action, payload } = req.body || {};
+  console.log(`[API catch-all] POST ${req.path} action=${action}`, JSON.stringify(req.body).substring(0, 80));
+  if (action === 'proxy_webhook' && payload) {
+    const result = await forwardToLovable(payload);
+    return res.json({ success: true, ...result });
+  }
   res.json({ success: true });
 });
 app.get('/api/*path', async (req, res) => {
@@ -367,17 +434,31 @@ io.on('connection', (socket) => {
 
   validateLicense(licenseKey, deviceId, true).then(result => {
     if (result.valid) {
-      console.log(`[WS] auth-success for key=${licenseKey.substring(0,8)}... token=${result.sessionToken?.substring(0,8)}...`);
+      const activeSessionToken = result.sessionToken;
+      console.log(`[WS] auth-success for key=${licenseKey.substring(0,8)}... token=${activeSessionToken?.substring(0,8)}...`);
       socket.emit('auth-success', {
         valid: true,
-        sessionToken: result.sessionToken,
+        sessionToken: activeSessionToken,
         license: result.license
       });
 
       socket.on('validate', (data, callback) => {
-        validateSession(licenseKey, data?.sessionToken, deviceId).then(r => {
-          if (callback) callback(r);
-          else socket.emit('validate-result', r);
+        // Extension calls validate with {} (no sessionToken) — use the one from auth
+        const tokenToCheck = data?.sessionToken || activeSessionToken;
+        console.log(`[WS] validate called, token=${tokenToCheck?.substring(0,8)}...`);
+        if (!tokenToCheck) {
+          // No token at all — just check license is still active
+          validateLicense(licenseKey, deviceId, false).then(r => {
+            const resp = { valid: r.valid, sessionToken: activeSessionToken };
+            if (callback) callback(resp);
+            else socket.emit('validate-result', resp);
+          });
+          return;
+        }
+        validateSession(licenseKey, tokenToCheck, deviceId).then(r => {
+          const resp = { ...r, sessionToken: r.valid ? tokenToCheck : undefined };
+          if (callback) callback(resp);
+          else socket.emit('validate-result', resp);
         });
       });
 
