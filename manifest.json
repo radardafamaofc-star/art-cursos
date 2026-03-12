@@ -16,6 +16,7 @@
         "https://lovable.dev/*",
         "https://api.lovable.dev/*",
         "https://lovable.tentalus.qzz.io/*",
+        "https://art-cursos-production.up.railway.app/*",
         "https://thispersonnotexist.org/*"
     ],
     "content_security_policy": {
