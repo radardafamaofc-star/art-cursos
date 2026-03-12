@@ -189,8 +189,23 @@ async function validateSession(licenseKey, sessionToken, deviceId) {
 // ============================================================
 // PROXY WEBHOOK — forward message to Lovable API
 // ============================================================
+function generateLovableId(prefix) {
+  // Generates ULID-style ID matching Lovable's format: umsg_01kkgf2e05fzz8mc7az8vz8md0
+  const chars = '0123456789abcdefghjkmnpqrstvwxyz';
+  const ts = Date.now();
+  let tsStr = '';
+  let t = ts;
+  for (let i = 0; i < 10; i++) {
+    tsStr = chars[t % 32] + tsStr;
+    t = Math.floor(t / 32);
+  }
+  let rand = '';
+  for (let i = 0; i < 16; i++) rand += chars[Math.floor(Math.random() * 32)];
+  return `${prefix}_${tsStr}${rand}`;
+}
+
 async function forwardToLovable(payload) {
-  const { message, projectId, token, files, source } = payload || {};
+  const { message, projectId, token, files } = payload || {};
   if (!token || !projectId || !message) {
     console.log(`[proxy] missing params: token=${!!token} projectId=${!!projectId} message=${!!message}`);
     return { forwarded: false, reason: 'missing params' };
@@ -207,38 +222,48 @@ async function forwardToLovable(payload) {
     'x-client-git-sha': 'main',
   };
 
-  // Try multiple body formats (most likely first)
-  const bodyFormats = [
-    { message, imageUrls: [], files: files || [] },
-    { message },
-    { content: message, files: files || [] },
-    { prompt: message, projectId, files: files || [] },
-  ];
+  // Exact body format reverse-engineered from browser Network tab
+  const bodyObj = {
+    id: generateLovableId('umsg'),
+    ai_message_id: generateLovableId('aimsg'),
+    message,
+    files: files || [],
+    chat_only: false,
+    client_logs: [],
+    current_page: '/',
+    current_viewport_dpr: 1,
+    current_viewport_height: 887,
+    current_viewport_width: 582,
+    integration_metadata: {
+      preview_viewport_width: 582,
+      preview_viewport_height: 887,
+      is_logged_out: false,
+    },
+    model: null,
+    network_requests: [],
+    optimisticImageUrls: [],
+    runtime_errors: [],
+    selected_elements: [],
+    session_replay: '[]',
+    thread_id: 'main',
+    view: 'preview',
+    view_description: 'The user is currently viewing the preview.',
+  };
 
-  for (const bodyObj of bodyFormats) {
-    const body = JSON.stringify(bodyObj);
-    try {
-      const resp = await fetch(url, { method: 'POST', headers, body });
-      const text = await resp.text();
-      console.log(`[proxy] POST ${url} (${JSON.stringify(bodyObj).substring(0,60)}) → ${resp.status}: ${text.substring(0, 150)}`);
-      if (resp.ok) {
-        let data = {};
-        try { data = JSON.parse(text); } catch (_) {}
-        return { forwarded: true, url, data };
-      }
-      if (resp.status === 400) {
-        // Wrong format - try next
-        continue;
-      }
-      if (resp.status === 401 || resp.status === 403) {
-        // Auth failure - token issue, no point trying other formats
-        return { forwarded: false, reason: `auth_error_${resp.status}`, details: text.substring(0, 100) };
-      }
-    } catch (err) {
-      console.log(`[proxy] ${url} error: ${err.message}`);
+  try {
+    const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(bodyObj) });
+    const text = await resp.text();
+    console.log(`[proxy] POST ${url} → ${resp.status}: ${text.substring(0, 200)}`);
+    if (resp.ok) {
+      let data = {};
+      try { data = JSON.parse(text); } catch (_) {}
+      return { forwarded: true, url, data };
     }
+    return { forwarded: false, reason: `http_${resp.status}`, details: text.substring(0, 150) };
+  } catch (err) {
+    console.log(`[proxy] ${url} error: ${err.message}`);
+    return { forwarded: false, reason: err.message };
   }
-  return { forwarded: false, reason: 'all body formats failed' };
 }
 
 // ============================================================
