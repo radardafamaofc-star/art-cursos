@@ -6,14 +6,14 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tvslxvrzskhxjnrxzjzu.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2c2x4dnJ6c2toeGpucnh6anp1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzI5MjUxOCwiZXhwIjoyMDg4ODY4NTE4fQ.vtgdTY_yQfA6tXcgBsjwjY-viNtS6dWa7bYl98UFn9I';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2c2x4dnJ6c2toeGpucnh6anp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyOTI1MTgsImV4cCI6MjA4ODg2ODUxOH0._WpVHFgSlDYSPBDk6deBNsjWCtGPJ46y2Am933pv4WI';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const app = express();
 const httpServer = createServer(app);
